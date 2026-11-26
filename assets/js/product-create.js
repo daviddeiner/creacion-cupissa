@@ -581,20 +581,22 @@ let allProducts=[];let tempTallas=[],tempColores=[],tempAccesorios=[],tempAcceso
         }
 
         async function handleSaveProduct(e) {
+            if(document.getElementById("product-step-save")?.disabled || pendingImageQueue.length) return;
+            if(window.creationStep!==5)return;
             e.preventDefault();
             e.stopPropagation();
             const productForm = e.currentTarget || e.target || document.querySelector('#modal-product-form form');
-            const editId = '';
+            const editId = document.getElementById('prod-edit-id').value;
             try { await verifyAdmin(); } catch(error) { alert(error.message); return; }
             let savedProductCount = 0;
             commitProductMultiInputs();
             const requiredFields = [
-                ['prod-nombre', 'Escribe el título del producto.', 1],
-                ['prod-mundo', 'Selecciona o escribe el mundo.', 1],
-                ['prod-categoria', 'Selecciona o escribe la categoría.', 1],
-                ['prod-temporada', 'Selecciona o escribe la temporada.', 1],
-                ['prod-precio-detal', 'Indica el precio al detal.', 2],
-                ['prod-porcentaje-anticipo', 'Indica el porcentaje de anticipo.', 2]
+                ['prod-nombre', 'Escribe el título del producto.', 2],
+                ['prod-mundo', 'Selecciona o escribe el mundo.', 2],
+                ['prod-categoria', 'Selecciona o escribe la categoría.', 2],
+                ['prod-temporada', 'Selecciona o escribe la temporada.', 2],
+                ['prod-precio-detal', 'Indica el precio al detal.', 3],
+                ['prod-porcentaje-anticipo', 'Indica el porcentaje de anticipo.', 3]
             ];
             for (const [fieldId, message, step] of requiredFields) {
                 const field = document.getElementById(fieldId);
@@ -614,8 +616,8 @@ let allProducts=[];let tempTallas=[],tempColores=[],tempAccesorios=[],tempAcceso
                 ...colorPhotoSources
             ].filter(Boolean)).size;
 
-            if (!editId && sourcePhotoCount === 0) {
-                window.showProductStep?.(2);
+            if (sourcePhotoCount === 0) {
+                window.showProductStep?.(1);
                 alert('Agrega al menos una foto del producto o asigna una foto a uno de sus colores.');
                 document.getElementById('product-publish-modes')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return;
@@ -727,7 +729,7 @@ let allProducts=[];let tempTallas=[],tempColores=[],tempAccesorios=[],tempAcceso
                     precio_detal: parseFloat(document.getElementById('prod-precio-detal').value) || 0,
                     precio_mayorista: parseFloat(document.getElementById('prod-precio-mayorista').value) || 0,
                     cant_min_mayorista: parseInt(document.getElementById('prod-cant-min-mayorista').value) || 6,
-                    porcentaje_anticipo: parseFloat(document.getElementById('prod-porcentaje-anticipo').value) || 20,
+                    porcentaje_anticipo: Number(document.getElementById('prod-porcentaje-anticipo').value),
                     dias_preparacion: parseInt(document.getElementById('prod-dias-preparacion').value) || 3,
                     oculto: editId ? undefined : false,
                     personalizable: document.getElementById('chk-personalizable').checked,
@@ -749,7 +751,10 @@ let allProducts=[];let tempTallas=[],tempColores=[],tempAccesorios=[],tempAcceso
 
                 {
                     const photosCount = galleryPhotoEntries.length;
-                    if (photosCount > 1 && selectedPublishMode === null) {
+                    if(editId){
+                        delete baseProductData.oculto;
+                        const {data,error}=await supabaseClient.from('productos').update({...baseProductData,fotos:allGalleryPhotos,fotos_originales:allGalleryOriginals}).eq('id',editId).select('id').single();if(error||!data)throw error||Error('Actualización no confirmada');
+                    } else if (photosCount > 1 && selectedPublishMode === null) {
                         // Comportamiento predeterminado: una sola publicación con todas las fotos.
                         savedProductCount = 1;
                         const { error } = await supabaseClient.from('productos').insert([{
@@ -788,6 +793,7 @@ let allProducts=[];let tempTallas=[],tempColores=[],tempAccesorios=[],tempAcceso
                 }
 
                 window.openProductModal();
+                if(editId) {submitBtn.disabled=false; window.creationShowCatalog?.();}
                 window.scrollTo({top:0,behavior:'smooth'});
                 try { localStorage.removeItem('cupissa_pending_product_draft'); } catch (_) {}
                 window.cupissaToast?.(editId ? 'Producto actualizado correctamente.' :
@@ -819,7 +825,7 @@ let allProducts=[];let tempTallas=[],tempColores=[],tempAccesorios=[],tempAcceso
                 alert(`Supabase no pudo guardar el producto: ${err?.message || 'Error desconocido'}. El formulario sigue abierto. El borrador local no aparecerá en el catálogo hasta guardarse correctamente en Supabase.`);
             } finally {
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = originalBtnHTML;
+                submitBtn.innerHTML = document.getElementById('prod-edit-id').value ? originalBtnHTML : 'Crear producto(s)';
             }
         }
 
@@ -833,7 +839,7 @@ let allProducts=[];let tempTallas=[],tempColores=[],tempAccesorios=[],tempAcceso
 
 async function loadClassificationOptions(){
  const rows=[];let offset=0;
- while(true){const {data,error}=await supabaseClient.from('productos').select('mundo,mundos,categoria,categorias,subcategoria,subcategorias,temporada,temporadas').order('id').range(offset,offset+999);if(error)throw error;rows.push(...(data||[]));if((data||[]).length<1000)break;offset+=1000;}
- allProducts=rows;renderSugerenciasCampos();
+ while(true){const {data,error}=await supabaseClient.from('productos').select('mundo,mundos,categoria,categorias,subcategoria,subcategorias,temporada,temporadas,tallas,colores,accesorios').order('id').range(offset,offset+999);if(error)throw error;rows.push(...(data||[]));if((data||[]).length<1000)break;offset+=1000;}
+ allProducts=rows;renderSugerenciasCampos();window.creationRefreshOptions?.();
 }
 async function startModule(){window.openProductModal();void loadClassificationOptions().catch(e=>console.warn('No se pudieron cargar sugerencias:',e.message));}

@@ -133,17 +133,17 @@
   };
 
   function showWizardStep(step) {
-    wizardStep = step === 2 ? 2 : 1;
-    $('product-step-1')?.toggleAttribute('hidden', wizardStep !== 1);
-    $('product-step-2')?.toggleAttribute('hidden', wizardStep !== 2);
+    wizardStep = Math.max(1,Math.min(5,Number(step)||1));
+    window.creationStep=wizardStep;
+    for(let i=1;i<=5;i++) $(`product-step-${i}`)?.toggleAttribute('hidden',wizardStep!==i);
     $('product-stepper')?.querySelectorAll('[data-step-indicator]').forEach(item => {
       item.classList.toggle('is-active', Number(item.dataset.stepIndicator) === wizardStep);
     });
     $('product-step-back')?.classList.toggle('hidden', wizardStep === 1);
-    $('product-step-next')?.classList.toggle('hidden', wizardStep === 2);
-    $('product-step-save')?.classList.toggle('hidden', wizardStep !== 2);
+    $('product-step-next')?.classList.toggle('hidden', wizardStep === 5);
+    $('product-step-save')?.classList.toggle('hidden', wizardStep !== 5);
     const modal = $('modal-product-form')?.querySelector(':scope > div');
-    if (modal) modal.scrollTo({ top: 0, behavior: 'smooth' });
+    if (modal) modal.scrollTo({ top: 0 }); window.scrollTo({top:0});
   }
 
   function validateBasicProductStep() {
@@ -192,16 +192,12 @@
     const stepper = document.createElement('div');
     stepper.id = 'product-stepper';
     stepper.className = 'admin-stepper';
-    stepper.innerHTML = `
-      <div class="admin-step-indicator is-active" data-step-indicator="1"><span class="admin-step-number">1</span><span><strong class="admin-step-title">Información del producto</strong><small class="admin-step-caption">Nombre, fotos y clasificación</small></span></div>
-      <div class="admin-step-indicator" data-step-indicator="2"><span class="admin-step-number">2</span><span><strong class="admin-step-title">Precios y variaciones</strong><small class="admin-step-caption">Tallas, colores y accesorios</small></span></div>`;
-    const step1 = document.createElement('section');
-    step1.id = 'product-step-1'; step1.className = 'admin-step-pane';
-    const step2 = document.createElement('section');
-    step2.id = 'product-step-2'; step2.className = 'admin-step-pane';
-    [basicInfo, description, classification, photos].forEach(element => step1.appendChild(element));
-    [prices, preparation, flags, rental, sizes, colors, accessories].filter(Boolean).forEach(element => step2.appendChild(element));
-
+    const labels=['Fotos','Información','Precios','Variaciones','Publicación'];
+    stepper.innerHTML=labels.map((label,i)=>`<div class="admin-step-indicator" data-step-indicator="${i+1}"><span class="admin-step-number">${i+1}</span><strong class="admin-step-title">${label}</strong></div>`).join('');
+    const panes=labels.map((label,i)=>{const el=document.createElement('section');el.id=`product-step-${i+1}`;el.className='admin-step-pane';return el;});
+    const [step1,step2,step3,step4,step5]=panes;
+    step1.append(photos);step2.append(basicInfo,description,classification);step3.append(...[prices,preparation,flags,rental].filter(Boolean));step4.append(sizes,colors,accessories);
+    step5.innerHTML='<p class="font-bold">Revisa la modalidad de publicación y guarda el producto.</p>';
     const modePanel = $('product-publish-modes') || document.createElement('div');
     modePanel.id = 'product-publish-modes';
     modePanel.className = 'product-publish-mode-panel';
@@ -251,7 +247,7 @@
     // Las opciones de publicar fotos/colores juntos o por separado pertenecen
     // al segundo paso (variaciones), no al bloque inicial de fotografías.
     if (modePanel.parentNode !== step2 || modePanel.previousElementSibling !== colors) {
-      colors.after(modePanel);
+      step5.append(modePanel);
     }
 
     // El formulario de colores ahora admite su propia fotografía.
@@ -285,13 +281,13 @@
     actions.className = 'admin-step-actions';
     actions.innerHTML = `
       <div class="flex items-center gap-2 w-full justify-end">
-        <button id="product-step-back" type="button" class="hidden px-5 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold" onclick="showProductStep(1)">Atrás</button>
+        <button id="product-step-back" type="button" class="hidden px-5 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold" onclick="showProductStep(window.creationStep-1)">Atrás</button>
         <button id="product-step-next" type="button" class="px-6 py-3 fuchsia-btn rounded-xl font-bold shadow-md" onclick="goToProductStep2()">Continuar <i class="fa-solid fa-arrow-right ml-1"></i></button>
         <button id="product-step-save" type="submit" class="hidden px-6 py-3 fuchsia-btn rounded-xl font-bold shadow-md"><i class="fa-solid fa-check mr-1"></i> Crear producto(s)</button>
       </div>`;
 
     form.replaceChildren(...Array.from(form.children).filter(node => node.id === 'prod-edit-id'));
-    form.append(stepper, step1, step2, actions);
+    form.append(stepper, ...panes, actions);
 
     // El formulario está dividido en fases y algunos campos requeridos quedan dentro
     // de un panel oculto. Desactivamos la validación HTML nativa para que no bloquee
@@ -316,7 +312,7 @@
     }
 
     window.showProductStep = showWizardStep;
-    window.goToProductStep2 = function () { if (validateBasicProductStep()) showWizardStep(2); };
+    window.goToProductStep2 = function () { if(wizardStep===2 && !validateBasicProductStep()) return; showWizardStep(wizardStep+1); };
     $('prod-color-file')?.addEventListener('change', event => window.handleColorFotoSelected(event));
     setPublishMode(null);
     window.setProductPublishPhotoCount?.(0);
@@ -569,7 +565,7 @@
     zone.replaceChildren();
     const title = document.createElement('div'); title.className = 'text-xs font-black text-slate-700 mb-2'; title.textContent = `Reutilizar ${kind} guardados`;
     zone.append(title);
-    const row = document.createElement('div'); row.className = 'flex gap-2 flex-wrap';
+    const details=document.createElement('details');const summary=document.createElement('summary');summary.textContent='Buscar opciones guardadas';details.append(summary);const search=document.createElement('input');search.type='search';search.placeholder='Buscar...';search.className='w-full border rounded-xl p-2 my-2';details.append(search);const row=document.createElement('div');row.className='flex gap-2 flex-wrap';details.append(row);search.oninput=()=>Array.from(row.children).forEach(el=>el.hidden=!el.textContent.toLowerCase().includes(search.value.toLowerCase()));
     for (const item of savedLibrary(kind)) {
       const button = document.createElement('button'); button.type = 'button';
       button.className = 'rounded-xl border border-pink-200 bg-pink-50 p-2 text-xs font-bold text-pink-800 inline-flex items-center gap-2 text-left hover:border-pink-500';
@@ -598,7 +594,7 @@
       wrapper.append(button, remove);
       row.append(wrapper);
     }
-    zone.append(row);
+    zone.append(details);
   }
   async function applyOptionPhotoFile(kind, index, selected) {
     if (!selected) return;
@@ -747,7 +743,7 @@
       const wrapper = document.createElement('div');
       wrapper.className = 'admin-photo-preview';
       const image = document.createElement('img'); image.src = src; image.alt = `Foto ${index + 1} del producto`;
-      image.className = 'w-20 h-20 object-contain rounded-xl border border-slate-200 bg-slate-50';
+      image.className = 'creation-large-photo object-contain rounded-xl border border-slate-200 bg-slate-50';
       const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'absolute -top-2 -right-2 bg-rose-600 text-white rounded-full w-5 h-5 text-[10px] font-black';
       remove.textContent = '×'; remove.title = 'Quitar fotografía'; remove.addEventListener('click', () => window.removeTempPhoto(index));
       wrapper.append(image, remove);
@@ -769,11 +765,10 @@
         }; file.click();
       };
       wrapper.appendChild(replace);
-      if (String(tempOriginalPhotos[index] || '').startsWith('data:')) {
+      if (tempOriginalPhotos[index] || src) {
         const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'admin-photo-edit'; edit.textContent = 'Recortar';
-        edit.addEventListener('click', () => {
-          pendingImageQueue.push({ original: tempOriginalPhotos[index], target: 'product-edit', index });
-          if (!currentCropper) startQueuedImageCrop();
+        edit.addEventListener('click', async () => {
+          try { let original=tempOriginalPhotos[index]||src; if(!original.startsWith('data:')) {const r=await fetch(original);if(!r.ok)throw Error('No se pudo descargar la foto');original=await readImageFile(await r.blob());} pendingImageQueue.push({original,target:'product-edit',index});if(!currentCropper)startQueuedImageCrop(); } catch(e){alert(e.message);}
         });
         wrapper.appendChild(edit);
       }
