@@ -1,0 +1,2 @@
+CREACION CUPISSA
+Publica el contenido de este ZIP en un repositorio nuevo llamado creacion-cupissa. Activa GitHub Pages. Usa el mismo correo y contraseña del ADMIN. No hay listado de productos, edición ni eliminación. Se reutilizan las operaciones INSERT y el bucket productos-cupissa del ADMIN. Las sugerencias solo consultan campos de clasificación. No hace falta SQL nuevo si el ADMIN ya crea productos correctamente. El mismo usuario de ADMIN conserva sus permisos en Supabase; este portal limita la interfaz, no los permisos globales de esa cuenta.

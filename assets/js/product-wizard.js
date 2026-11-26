@@ -1,0 +1,855 @@
+/* CUPISSA ADMIN - mejoras incrementales.
+   Este módulo extiende la interfaz actual sin sustituir los módulos de créditos,
+   catálogo, clientes web ni pedidos que ya están en producción. */
+(() => {
+  'use strict';
+
+  const $ = id => document.getElementById(id);
+  const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+  }[char]));
+  let wizardStep = 1;
+  let colorPhoto = '';
+  let colorPhotoOriginal = '';
+  let publishMode = null;
+  let publishCoverSources = new Set();
+  let publishKnownSources = new Set();
+
+  function getPublishPhotoChoiceEntries() {
+    const entries = [];
+    (Array.isArray(tempBase64Photos) ? tempBase64Photos : []).forEach((photo, index) => {
+      const source = String(photo || '').trim();
+      if (source) entries.push({ kind: 'product', index, source, key: source });
+    });
+    (Array.isArray(tempColores) ? tempColores : []).forEach((item, index) => {
+      const source = typeof item === 'string' ? '' : String(item?.foto || item?.imagen || item?.imagen_url || '').trim();
+      if (source) entries.push({ kind: 'color', index, source, key: source });
+    });
+    return entries;
+  }
+
+  function syncPublishCoverSources() {
+    const entries = getPublishPhotoChoiceEntries();
+    const current = new Set(entries.map(entry => entry.key));
+    entries.forEach(entry => {
+      if (publishMode && !publishKnownSources.has(entry.key)) publishCoverSources.add(entry.key);
+    });
+    [...publishCoverSources].forEach(source => { if (!current.has(source)) publishCoverSources.delete(source); });
+    if (publishMode && !publishCoverSources.size && entries.length) publishCoverSources.add(entries[0].key);
+    publishKnownSources = current;
+    document.querySelectorAll('[data-publish-cover-kind]').forEach(input => {
+      const entry = entries.find(item => item.kind === input.dataset.publishCoverKind && String(item.index) === String(input.dataset.publishCoverIndex));
+      input.checked = !!entry && publishCoverSources.has(entry.key);
+      input.disabled = !publishMode;
+      const label = input.closest('.admin-publish-cover-choice');
+      label?.classList.toggle('hidden', !publishMode);
+    });
+    const help = $('product-publish-cover-help');
+    const selected = $('product-publish-cover-selected');
+    help?.classList.toggle('hidden', !publishMode);
+    selected?.classList.toggle('hidden', !publishMode);
+    if (selected && publishMode) {
+      selected.textContent = `${publishCoverSources.size} portada(s) seleccionada(s). Se crearán ${publishCoverSources.size} publicación(es).`;
+    }
+    window.CUPISSA_PRODUCT_PUBLISH_COVERS = [...publishCoverSources];
+  }
+
+  window.setProductPublishCover = function(kind, index, checked) {
+    const entry = getPublishPhotoChoiceEntries().find(item => item.kind === String(kind) && Number(item.index) === Number(index));
+    if (!entry || !publishMode) return;
+    if (checked) publishCoverSources.add(entry.key);
+    else {
+      const remaining = new Set(publishCoverSources);
+      remaining.delete(entry.key);
+      if (!remaining.size) {
+        alert('Selecciona al menos una fotografía como portada.');
+        syncPublishCoverSources();
+        return;
+      }
+      publishCoverSources.delete(entry.key);
+    }
+    syncPublishCoverSources();
+  };
+
+  function getProductMainPhotoCount() {
+    const mainPhotos = Array.isArray(tempBase64Photos) ? tempBase64Photos : [];
+    const colorPhotos = (Array.isArray(tempColores) ? tempColores : []).map(item =>
+      typeof item === 'string' ? '' : String(item?.foto || item?.imagen || item?.imagen_url || '').trim()
+    );
+    return new Set([...mainPhotos, ...colorPhotos].filter(Boolean)).size;
+  }
+
+  function setPublishMode(mode) {
+    const panel = $('product-publish-modes');
+    const photoCount = Number(panel?.dataset.photoCount || getProductMainPhotoCount());
+    if ((mode === 'single' || mode === 'gallery') && photoCount < 2) return null;
+    const previousMode = publishMode;
+    publishMode = mode === 'single' || mode === 'gallery' ? mode : null;
+    window.CUPISSA_PRODUCT_PUBLISH_MODE = publishMode;
+    if (publishMode && !previousMode) {
+      publishCoverSources = new Set(getPublishPhotoChoiceEntries().map(entry => entry.key));
+      publishKnownSources = new Set(publishCoverSources);
+    }
+    if (!publishMode) {
+      publishCoverSources.clear();
+      publishKnownSources = new Set(getPublishPhotoChoiceEntries().map(entry => entry.key));
+    }
+    document.querySelectorAll('#product-publish-modes [data-publish-mode]').forEach(button => {
+      const active = button.dataset.publishMode === publishMode;
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
+      const radio = button.querySelector('input[type=radio]');
+      if (radio) radio.checked = active;
+    });
+    syncPublishCoverSources();
+    return publishMode;
+  }
+  window.setProductPublishMode = setPublishMode;
+
+  function updateProductPublishModeVisibility() {
+    const panel = $('product-publish-modes');
+    if (!panel) return;
+    const photoCount = getProductMainPhotoCount();
+    const isEditingExistingProduct = !!$('prod-edit-id')?.value;
+    panel.dataset.photoCount = String(photoCount);
+    panel.classList.toggle('hidden', isEditingExistingProduct);
+    const countLabel = panel.querySelector('[data-publish-count]');
+    if (countLabel) {
+      countLabel.textContent = photoCount < 2
+        ? 'Con estas fotos se creará una sola publicación. No necesitas elegir una modalidad.'
+        : `${photoCount} fotografías disponibles. Sin modalidad se crea una publicación completa; con modalidad puedes elegir las portadas.`;
+    }
+    panel.querySelectorAll('[data-publish-mode]').forEach(button => {
+      const disabled = photoCount < 2 || isEditingExistingProduct;
+      button.disabled = disabled;
+      button.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+    });
+    if (photoCount < 2 && publishMode) setPublishMode(null);
+    syncPublishCoverSources();
+  }
+  window.updateProductPublishModeVisibility = updateProductPublishModeVisibility;
+  window.setProductPublishPhotoCount = function() {
+    updateProductPublishModeVisibility();
+  };
+
+  function showWizardStep(step) {
+    wizardStep = step === 2 ? 2 : 1;
+    $('product-step-1')?.toggleAttribute('hidden', wizardStep !== 1);
+    $('product-step-2')?.toggleAttribute('hidden', wizardStep !== 2);
+    $('product-stepper')?.querySelectorAll('[data-step-indicator]').forEach(item => {
+      item.classList.toggle('is-active', Number(item.dataset.stepIndicator) === wizardStep);
+    });
+    $('product-step-back')?.classList.toggle('hidden', wizardStep === 1);
+    $('product-step-next')?.classList.toggle('hidden', wizardStep === 2);
+    $('product-step-save')?.classList.toggle('hidden', wizardStep !== 2);
+    const modal = $('modal-product-form')?.querySelector(':scope > div');
+    if (modal) modal.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function validateBasicProductStep() {
+    window.commitProductMultiInputs?.();
+    const required = [
+      ['prod-nombre', 'Escribe el título del producto.'],
+      ['prod-mundo', 'Selecciona o escribe el mundo.'],
+      ['prod-categoria', 'Selecciona o escribe la categoría.'],
+      ['prod-temporada', 'Selecciona o escribe la temporada.']
+    ];
+    for (const [id, message] of required) {
+      const field = $(id);
+      if (!field || !String(field.value || '').trim()) {
+        alert(message);
+        field?.focus();
+        return false;
+      }
+    }
+    // Las fotos de color se agregan en el paso 2 y también cuentan como fotos principales.
+    return true;
+  }
+
+  function buildProductWizard() {
+    const modal = $('modal-product-form');
+    const form = modal?.querySelector('form');
+    if (!form || $('product-stepper')) return;
+    const direct = Array.from(form.children);
+    // querySelector no incluye al propio elemento. El bloque de alquiler usa
+    // #wrapper-alquiler-extra en el nodo raíz; si no se reconoce aquí, se elimina
+    // al reconstruir el formulario y abrir/editar el producto falla por campos nulos.
+    const blockFor = selector => direct.find(element => element.matches?.(selector) || element.querySelector?.(selector));
+    const basicInfo = blockFor('#prod-nombre');
+    const description = blockFor('#prod-descripcion');
+    const classification = blockFor('#prod-categoria');
+    const prices = blockFor('#prod-precio-detal');
+    const preparation = blockFor('#prod-dias-preparacion');
+    const flags = blockFor('#chk-personalizable');
+    const rental = blockFor('#wrapper-alquiler-extra');
+    const sizes = blockFor('#inp-talla-nombre');
+    const colors = blockFor('#inp-color-nombre');
+    const accessories = blockFor('#inp-accesorio-nombre');
+    const photos = blockFor('#prod-files-input');
+    const oldActions = direct.find(element => element.querySelector?.('button[type="submit"]'));
+    if (![basicInfo, description, classification, prices, sizes, colors, accessories, photos, oldActions].every(Boolean)) return;
+
+    const stepper = document.createElement('div');
+    stepper.id = 'product-stepper';
+    stepper.className = 'admin-stepper';
+    stepper.innerHTML = `
+      <div class="admin-step-indicator is-active" data-step-indicator="1"><span class="admin-step-number">1</span><span><strong class="admin-step-title">Información del producto</strong><small class="admin-step-caption">Nombre, fotos y clasificación</small></span></div>
+      <div class="admin-step-indicator" data-step-indicator="2"><span class="admin-step-number">2</span><span><strong class="admin-step-title">Precios y variaciones</strong><small class="admin-step-caption">Tallas, colores y accesorios</small></span></div>`;
+    const step1 = document.createElement('section');
+    step1.id = 'product-step-1'; step1.className = 'admin-step-pane';
+    const step2 = document.createElement('section');
+    step2.id = 'product-step-2'; step2.className = 'admin-step-pane';
+    [basicInfo, description, classification, photos].forEach(element => step1.appendChild(element));
+    [prices, preparation, flags, rental, sizes, colors, accessories].filter(Boolean).forEach(element => step2.appendChild(element));
+
+    const modePanel = $('product-publish-modes') || document.createElement('div');
+    modePanel.id = 'product-publish-modes';
+    modePanel.className = 'product-publish-mode-panel';
+    if (!modePanel.querySelector('[data-publish-mode="single"]')) modePanel.innerHTML = `
+      <div class="flex flex-wrap items-center justify-between gap-2 mt-3">
+        <p class="text-[11px] font-black uppercase tracking-wide text-slate-700">¿Cómo deseas publicar las fotos del producto y sus colores?</p>
+        <span data-publish-count class="text-[10px] font-semibold text-slate-500"></span>
+      </div>
+      <div class="admin-publish-modes">
+        <button type="button" data-publish-mode="single" aria-pressed="false" class="admin-publish-mode">
+          <span class="admin-publish-radio" aria-hidden="true"></span>
+          <strong><i class="fa-solid fa-images mr-1"></i> PUBLICAR PRODUCTOS POR SEPARADO</strong>
+          <small>Crea una publicación independiente por cada foto que marques como portada. Cada publicación conserva los mismos datos y variaciones, y muestra únicamente su portada.</small>
+        </button>
+        <button type="button" data-publish-mode="gallery" aria-pressed="false" class="admin-publish-mode">
+          <span class="admin-publish-radio" aria-hidden="true"></span>
+          <strong><i class="fa-solid fa-layer-group mr-1"></i> PUBLICAR PRODUCTOS JUNTOS</strong>
+          <small>Crea una publicación por cada foto marcada como portada. Cada publicación tendrá esa portada y conservará todas las fotos principales y de colores en su galería.</small>
+        </button>
+      </div>
+      <p class="text-[10px] font-semibold text-slate-600 mt-2">Sin elegir modalidad se crea una sola publicación con toda la galería. Si eliges una modalidad, marca las fotos que serán portada de cada publicación.</p>
+      <p id="product-publish-cover-help" class="text-[10px] font-bold text-pink-700 mt-2 hidden">Marca las fotos que deseas usar como portada. Cada foto marcada creará una publicación.</p>
+      <p id="product-publish-cover-selected" class="text-[10px] text-slate-600 mt-1 hidden"></p>`;
+    if (!modePanel.dataset.eventsReady) {
+      modePanel.addEventListener('click', event => {
+        const option = event.target.closest('[data-publish-mode]');
+        if (option && !option.disabled) setPublishMode(option.dataset.publishMode);
+      });
+      modePanel.dataset.eventsReady = 'true';
+    }
+    const fileInput = $('prod-files-input');
+    const photoPanel = fileInput?.closest('.border');
+    if (photoPanel) {
+      photoPanel.classList.add('product-photo-dropzone');
+      const label = photoPanel.querySelector('label');
+      if (label) label.textContent = 'FOTOGRAFÍAS DEL PRODUCTO (PUEDES SELECCIONAR VARIAS)';
+      const hint = photoPanel.querySelector('p');
+      if (hint) hint.textContent = 'Arrastra imágenes aquí, selecciónalas o pégalas desde el portapapeles. Recorta libremente, sin formato cuadrado, o conserva la foto completa.';
+      const pasteHelp = document.createElement('p');
+      pasteHelp.className = 'text-[10px] text-slate-400 mt-2';
+      pasteHelp.innerHTML = '<i class="fa-regular fa-paste mr-1"></i> También puedes copiar una imagen y pegarla aquí con Ctrl + V.';
+      if (!photoPanel.querySelector('[data-cupissa-paste-help]')) {
+        pasteHelp.dataset.cupissaPasteHelp = 'true';
+        photoPanel.appendChild(pasteHelp);
+      }
+    }
+    // Las opciones de publicar fotos/colores juntos o por separado pertenecen
+    // al segundo paso (variaciones), no al bloque inicial de fotografías.
+    if (modePanel.parentNode !== step2 || modePanel.previousElementSibling !== colors) {
+      colors.after(modePanel);
+    }
+
+    // El formulario de colores ahora admite su propia fotografía.
+    const colorPhotoArea = document.createElement('div');
+    colorPhotoArea.id = 'prod-color-photo-area';
+    colorPhotoArea.className = 'admin-image-dropzone grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 items-end rounded-xl p-2';
+    colorPhotoArea.innerHTML = `
+      <label class="block text-[10px] font-black uppercase text-slate-600">Foto principal de este color
+        <input id="prod-color-file" type="file" accept="image/*" class="mt-1 w-full bg-white border border-slate-200 rounded-xl p-2 text-[10px]">
+      </label>
+      <p class="sm:col-span-2 text-[10px] leading-relaxed text-slate-500">Arrastra o pega una imagen aquí (Ctrl+V), o selecciónala arriba. Esta imagen también aparecerá en grande en la galería del producto. Cuando el cliente elija este color, la ficha mostrará automáticamente su foto.</p>
+      <div id="prod-color-photo-preview" class="hidden"></div>`;
+    const accessoryLabel = $('inp-accesorio-foto')?.closest('label');
+    if (accessoryLabel) {
+      accessoryLabel.id = 'prod-accessory-photo-area';
+      accessoryLabel.classList.add('admin-image-dropzone','rounded-xl','p-2');
+      accessoryLabel.title = 'Arrastra o pega una imagen del accesorio (Ctrl+V)'; accessoryLabel.tabIndex = 0;
+      if (!accessoryLabel.querySelector('.cupissa-accessory-drop-hint')) {
+        const hint = document.createElement('p');hint.className='cupissa-accessory-drop-hint';
+        hint.textContent='Arrastra aquí una foto o pega una imagen con Ctrl+V. También puedes elegirla de tu dispositivo.';
+        accessoryLabel.append(hint);
+      }
+    }
+    colorPhotoArea.tabIndex = 0;
+    colorPhotoArea.title = 'Arrastra una imagen o pega con Ctrl+V';
+    const colorChildren = Array.from(colors.children);
+    const colorInputRow = colorChildren.find(element => element.querySelector?.('#inp-color-nombre'));
+    if (colorInputRow) colors.insertBefore(colorPhotoArea, colorInputRow.nextSibling);
+
+    const actions = document.createElement('div');
+    actions.className = 'admin-step-actions';
+    actions.innerHTML = `
+      <div class="flex items-center gap-2 w-full justify-end">
+        <button id="product-step-back" type="button" class="hidden px-5 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold" onclick="showProductStep(1)">Atrás</button>
+        <button id="product-step-next" type="button" class="px-6 py-3 fuchsia-btn rounded-xl font-bold shadow-md" onclick="goToProductStep2()">Continuar <i class="fa-solid fa-arrow-right ml-1"></i></button>
+        <button id="product-step-save" type="submit" class="hidden px-6 py-3 fuchsia-btn rounded-xl font-bold shadow-md"><i class="fa-solid fa-check mr-1"></i> Crear producto(s)</button>
+      </div>`;
+
+    form.replaceChildren(...Array.from(form.children).filter(node => node.id === 'prod-edit-id'));
+    form.append(stepper, step1, step2, actions);
+
+    // El formulario está dividido en fases y algunos campos requeridos quedan dentro
+    // de un panel oculto. Desactivamos la validación HTML nativa para que no bloquee
+    // el submit sin mostrar una acción visible; la validación se realiza en el flujo JS.
+    form.noValidate = true;
+    form.removeAttribute('onsubmit');
+    if (!form.dataset.cupissaProductSubmitReady) {
+      form.addEventListener('submit', event => {
+        event.preventDefault();
+        const submitHandler = window.handleSaveProduct;
+        if (typeof submitHandler !== 'function') {
+          alert('No se pudo iniciar el guardado del producto. Recarga CUPISSA ADMIN y vuelve a intentarlo.');
+          console.error('CUPISSA: window.handleSaveProduct no está disponible.');
+          return;
+        }
+        Promise.resolve(submitHandler(event)).catch(error => {
+          console.error('Error inesperado al guardar el producto:', error);
+          alert(`No se pudo guardar el producto: ${error?.message || 'Error inesperado.'}`);
+        });
+      });
+      form.dataset.cupissaProductSubmitReady = 'true';
+    }
+
+    window.showProductStep = showWizardStep;
+    window.goToProductStep2 = function () { if (validateBasicProductStep()) showWizardStep(2); };
+    $('prod-color-file')?.addEventListener('change', event => window.handleColorFotoSelected(event));
+    setPublishMode(null);
+    window.setProductPublishPhotoCount?.(0);
+    showWizardStep(1);
+  }
+
+  const baseOpenProduct = window.openProductModal;
+  if (typeof baseOpenProduct === 'function') {
+    window.openProductModal = function (...args) {
+      baseOpenProduct.apply(this, args);
+      colorPhoto = '';
+      colorPhotoOriginal = '';
+      setPublishMode(null);
+      window.setProductPublishPhotoCount?.();
+      // En un producto nuevo el selector siempre debe verse; queda deshabilitado
+      // hasta que se carguen al menos dos fotografías.
+      $('product-publish-modes')?.classList.remove('hidden');
+      window.updateProductPublishModeVisibility?.();
+      window.renderColorFotoPreview();
+      renderReusableOptions('colores'); renderReusableOptions('accesorios');
+      showWizardStep(1);
+    };
+  }
+  function readImageFile(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error(`No se pudo leer ${file.name || 'la imagen'}.`));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function enqueueImageFiles(files, target = 'product') {
+    const imageFiles = Array.from(files || []).filter(file => file?.type?.startsWith('image/'));
+    if (!imageFiles.length) return;
+    const oversized = imageFiles.filter(file => file.size > 15 * 1024 * 1024);
+    if (oversized.length) {
+      alert('Cada imagen debe pesar máximo 15 MB.');
+    }
+    const allowed = imageFiles.filter(file => file.size <= 15 * 1024 * 1024);
+    try {
+      const dataUrls = await Promise.all(allowed.map(readImageFile));
+      dataUrls.forEach(original => pendingImageQueue.push({ original, target }));
+      if (pendingImageQueue.length && !currentCropper) startQueuedImageCrop();
+    } catch (error) {
+      alert(error.message || 'No fue posible cargar la imagen.');
+    }
+  }
+
+  function startQueuedImageCrop() {
+    if (!pendingImageQueue.length) return;
+    const item = pendingImageQueue[0];
+    const image = $('image-to-crop');
+    if (!image || typeof window.Cropper !== 'function') {
+      alert('El editor de imágenes no está disponible.');
+      pendingImageQueue.length = 0;
+      return;
+    }
+    $('cropper-counter').textContent = `${pendingImageQueue.length} imagen(es) pendiente(s)`;
+    if (currentCropper) { currentCropper.destroy(); currentCropper = null; }
+    image.onload = () => {
+      currentCropper = new Cropper(image, { aspectRatio: NaN, viewMode: 2, autoCropArea: .92, responsive: true, background: false });
+    };
+    image.onerror = () => {
+      alert('No fue posible abrir esta fotografía.');
+      pendingImageQueue.shift();
+      if (pendingImageQueue.length) startQueuedImageCrop();
+      else $('modal-cropper')?.classList.add('hidden');
+    };
+    $('modal-cropper')?.classList.remove('hidden');
+    image.src = item.original;
+  }
+
+  function closeCurrentCropper() {
+    if (currentCropper) { currentCropper.destroy(); currentCropper = null; }
+    $('modal-cropper')?.classList.add('hidden');
+  }
+
+  function applyCroppedImage(cropped, original, queueItem) {
+    const target = queueItem?.target || 'product';
+    if (target === 'product') {
+      tempBase64Photos.push(cropped);
+      tempOriginalPhotos.push(original);
+      window.renderPreviewPhotos();
+    } else if (target === 'product-edit') {
+      const index = Number(queueItem.index);
+      const oldImage = tempBase64Photos[index];
+      tempBase64Photos[index] = cropped;
+      tempOriginalPhotos[index] = original;
+      tempColores.forEach(color => {
+        if (color && typeof color === 'object' && color.foto === oldImage) {
+          color.foto = cropped; color.foto_original = original;
+        }
+      });
+      window.renderColoresTags?.();
+      window.renderPreviewPhotos();
+    } else if (target === 'option-edit') {
+      const array = queueItem.kind === 'colores' ? tempColores : tempAccesorios;
+      const option = array[Number(queueItem.index)];
+      if (option && typeof option === 'object') {
+        option.foto = cropped;
+        if (queueItem.kind === 'colores') option.foto_original = original;
+        option.__cupissaProductOnly = true;
+        if (queueItem.kind === 'colores') window.renderColoresTags?.();
+        else window.renderAccesoriosTags?.();
+      }
+    } else if (target === 'accessory') {
+      tempAccesorioFoto = cropped;
+      window.renderAccesorioFotoPreview();
+    } else if (target === 'color') {
+      colorPhoto = cropped;
+      colorPhotoOriginal = original;
+      window.renderColorFotoPreview();
+    }
+  }
+
+  function finishQueuedCrop(skip = false) {
+    if (!pendingImageQueue.length) { closeCurrentCropper(); return; }
+    const item = pendingImageQueue[0];
+    let result = item.original;
+    if (!skip && currentCropper) {
+      const canvas = currentCropper.getCroppedCanvas({ imageSmoothingQuality: 'high' });
+      if (canvas) result = canvas.toDataURL('image/jpeg', .9);
+    }
+    pendingImageQueue.shift();
+    applyCroppedImage(result, item.original, item);
+    closeCurrentCropper();
+    if (pendingImageQueue.length) window.setTimeout(startQueuedImageCrop, 180);
+  }
+
+  window.handleImageFilesSelected = function (event) {
+    enqueueImageFiles(event?.target?.files, 'product');
+    if (event?.target) event.target.value = '';
+  };
+  window.handleAccesorioFotoSelected = function (event) {
+    enqueueImageFiles(event?.target?.files, 'accessory');
+    if (event?.target) event.target.value = '';
+  };
+  window.handleColorFotoSelected = function (event) {
+    enqueueImageFiles(event?.target?.files, 'color');
+    if (event?.target) event.target.value = '';
+  };
+  window.confirmCropPhoto = () => finishQueuedCrop(false);
+  window.skipCurrentPhotoCrop = () => finishQueuedCrop(true);
+
+  window.renderColorFotoPreview = function () {
+    const preview = $('prod-color-photo-preview');
+    if (!preview) return;
+    preview.innerHTML = '';
+    if (!colorPhoto) { preview.classList.add('hidden'); return; }
+    const image = document.createElement('img');
+    image.src = colorPhoto; image.alt = 'Foto del color';
+    image.className = 'w-14 h-14 object-cover rounded-xl border border-slate-200';
+    preview.appendChild(image); preview.classList.remove('hidden');
+  };
+
+  window.renderAccesorioFotoPreview = function () {
+    const preview = $('accesorio-foto-preview');
+    if (!preview) return;
+    preview.innerHTML = '';
+    if (!tempAccesorioFoto) { preview.classList.add('hidden'); return; }
+    const image = document.createElement('img');
+    image.src = tempAccesorioFoto; image.alt = 'Vista previa del accesorio';
+    image.className = 'w-16 h-16 object-cover rounded-xl border border-emerald-200';
+    preview.appendChild(image); preview.classList.remove('hidden');
+  };
+
+  // Biblioteca reutilizable: las fotografías se conservan en IndexedDB,
+  // evitando el límite de espacio de localStorage para imágenes Base64.
+  const libraryKeys = { colores: 'cupissa_saved_colors_library', accesorios: 'cupissa_saved_accessories_library' };
+  function savedLibrary(kind) { try { return JSON.parse(localStorage.getItem(libraryKeys[kind]) || '[]'); } catch (_) { return []; } }
+  let libraryDBPromise;
+  function openLibraryDB() {
+    if (!libraryDBPromise) libraryDBPromise = new Promise((resolve, reject) => {
+      const request = indexedDB.open('cupissa-admin-option-photos', 1);
+      request.onupgradeneeded = () => { if (!request.result.objectStoreNames.contains('photos')) request.result.createObjectStore('photos'); };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    return libraryDBPromise;
+  }
+  async function storeLibraryPhoto(key, value) {
+    try {
+      const db = await openLibraryDB();
+      await new Promise((resolve, reject) => {
+        const request = db.transaction('photos', 'readwrite').objectStore('photos').put(value, key);
+        request.onsuccess = resolve; request.onerror = () => reject(request.error);
+      });
+    } catch (error) { console.warn('No fue posible guardar la foto reutilizable', error); }
+  }
+  async function getLibraryPhoto(key) {
+    try {
+      const db = await openLibraryDB();
+      return await new Promise((resolve, reject) => {
+        const request = db.transaction('photos', 'readonly').objectStore('photos').get(key);
+        request.onsuccess = () => resolve(request.result || ''); request.onerror = () => reject(request.error);
+      });
+    } catch (_) { return ''; }
+  }
+  const photoLibraryKey = (kind, name) => `${kind}:${String(name || '').trim().toLocaleLowerCase('es')}`;
+  const removedLibraryKey = kind => `cupissa_removed_${kind}_library`;
+  function removedLibraryNames(kind) {
+    try { return JSON.parse(localStorage.getItem(removedLibraryKey(kind)) || '[]'); }
+    catch (_) { return []; }
+  }
+  async function deleteSavedLibraryItem(kind, name) {
+    const key = String(name || '').trim().toLocaleLowerCase('es');
+    const confirmed = typeof window.cupissaConfirm === 'function'
+      ? await window.cupissaConfirm(`¿Quitar “${name}” de tus ${kind} guardados? No afectará ningún producto publicado.`)
+      : window.confirm(`¿Quitar “${name}” de tus ${kind} guardados? No afectará ningún producto publicado.`);
+    if (!confirmed) return;
+    try {
+      const kept = savedLibrary(kind).filter(i => String(i.nombre || '').trim().toLocaleLowerCase('es') !== key);
+      localStorage.setItem(libraryKeys[kind], JSON.stringify(kept));
+      const removed = new Set(removedLibraryNames(kind));
+      removed.add(key);
+      localStorage.setItem(removedLibraryKey(kind), JSON.stringify([...removed]));
+    } catch (error) { alert('No fue posible quitar esta opción guardada.'); return; }
+    try {
+      const db = await openLibraryDB();
+      await new Promise((resolve, reject) => {
+        const request = db.transaction('photos', 'readwrite').objectStore('photos').delete(photoLibraryKey(kind, name));
+        request.onsuccess = resolve; request.onerror = () => reject(request.error);
+      });
+    } catch (error) { console.warn('No se pudo borrar la miniatura en caché:', error); }
+    await renderReusableOptions(kind);
+  }
+
+  function saveLibraryItem(kind, item, explicit = false) {
+    const name = String(item?.nombre || '').trim(); if (!name) return;
+    const normalized = name.toLocaleLowerCase('es');
+    if (!explicit && removedLibraryNames(kind).includes(normalized)) return;
+    if (explicit) {
+      try { localStorage.setItem(removedLibraryKey(kind), JSON.stringify(removedLibraryNames(kind).filter(x => x !== normalized))); }
+      catch (_) { /* Biblioteca local no disponible */ }
+    }
+    const photo = String(item.foto || item.imagen || '');
+    const clean = { nombre: name, incremento: Number(item.incremento || 0), foto: photo.startsWith('data:') ? '' : photo };
+    const data = savedLibrary(kind).filter(i => i.nombre.toLowerCase() !== name.toLowerCase());
+    data.push(clean);
+    try { localStorage.setItem(libraryKeys[kind], JSON.stringify(data)); } catch (e) { console.warn('No se pudo guardar plantilla', e); }
+    if (photo.startsWith('data:')) storeLibraryPhoto(photoLibraryKey(kind, name), photo).then(() => renderReusableOptions(kind));
+    renderReusableOptions(kind);
+  }
+  async function renderReusableOptions(kind) {
+    const id = kind === 'colores' ? 'list-colores-tags' : 'list-accesorios-tags';
+    const host = $(id)?.parentElement; if (!host) return;
+    let zone = $(`cupissa-library-${kind}`);
+    if (!zone) { zone = document.createElement('div'); zone.id = `cupissa-library-${kind}`; zone.className = 'mt-3 rounded-xl border border-pink-100 bg-white p-3'; host.appendChild(zone); }
+    zone.replaceChildren();
+    const title = document.createElement('div'); title.className = 'text-xs font-black text-slate-700 mb-2'; title.textContent = `Reutilizar ${kind} guardados`;
+    zone.append(title);
+    const row = document.createElement('div'); row.className = 'flex gap-2 flex-wrap';
+    for (const item of savedLibrary(kind)) {
+      const button = document.createElement('button'); button.type = 'button';
+      button.className = 'rounded-xl border border-pink-200 bg-pink-50 p-2 text-xs font-bold text-pink-800 inline-flex items-center gap-2 text-left hover:border-pink-500';
+      const photo = item.foto || await getLibraryPhoto(photoLibraryKey(kind, item.nombre));
+      if (photo) {
+        const img = document.createElement('img'); img.src = photo; img.alt = `Foto de ${item.nombre}`;
+        img.className = 'w-12 h-12 object-cover rounded-lg border border-pink-200 bg-white shrink-0'; button.append(img);
+      } else {
+        const placeholder = document.createElement('span'); placeholder.className = 'w-12 h-12 rounded-lg bg-white border border-dashed border-pink-200 flex items-center justify-center shrink-0';
+        placeholder.textContent = 'Foto'; button.append(placeholder);
+      }
+      const label = document.createElement('span'); label.textContent = `${item.nombre} (+${new Intl.NumberFormat('es-CO').format(item.incremento || 0)})`; button.append(label);
+      button.onclick = () => {
+        const array = kind === 'colores' ? tempColores : tempAccesorios;
+        if (!array.some(x => String(x.nombre || x).toLowerCase() === item.nombre.toLowerCase())) array.push({ ...item, foto: photo, __cupissaProductOnly: true });
+        if (kind === 'colores') window.renderColoresTags(); else window.renderAccesoriosTags();
+      };
+      const wrapper = document.createElement('span');
+      wrapper.className = 'inline-flex items-stretch overflow-hidden rounded-xl border border-pink-200 bg-pink-50';
+      button.classList.remove('rounded-xl', 'border', 'border-pink-200');
+      const remove = document.createElement('button'); remove.type = 'button';
+      remove.textContent = '×'; remove.title = `Quitar ${item.nombre} de opciones guardadas`;
+      remove.setAttribute('aria-label', `Quitar ${item.nombre} de opciones guardadas`);
+      remove.className = 'px-2 text-sm font-black text-rose-600 hover:bg-rose-100 border-l border-pink-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-rose-500';
+      remove.onclick = () => deleteSavedLibraryItem(kind, item.nombre);
+      wrapper.append(button, remove);
+      row.append(wrapper);
+    }
+    zone.append(row);
+  }
+  async function applyOptionPhotoFile(kind, index, selected) {
+    if (!selected) return;
+    if (!selected.type?.startsWith('image/') || selected.size > 15 * 1024 * 1024) {
+      alert('Selecciona una imagen JPG, PNG o WEBP de máximo 15 MB.'); return;
+    }
+    try {
+      const photo = await readImageFile(selected);
+      const options = kind === 'colores' ? tempColores : tempAccesorios;
+      let option = options[index]; if (!option) return;
+      if (typeof option === 'string') option = options[index] = {nombre:option,incremento:0};
+      option.foto = photo;
+      if (kind === 'colores') option.foto_original = photo;
+      option.__cupissaProductOnly = true;
+      if(kind === 'colores') window.renderColoresTags(); else window.renderAccesoriosTags();
+    } catch(error) { alert(error?.message || 'No se pudo cargar la nueva imagen.'); }
+  }
+  function replaceOptionPhoto(kind, index) {
+    const file = document.createElement('input');
+    file.type = 'file'; file.accept = 'image/*';
+    file.style.position = 'fixed'; file.style.left = '-9999px';
+    document.body.appendChild(file);
+    file.addEventListener('change', async () => {
+      await applyOptionPhotoFile(kind, index, file.files?.[0]);
+      file.remove();
+    }, {once:true});
+    file.click();
+  }
+  function addProductOnlyPriceEditor(tag, kind, index, initialPrice) {
+    const box = document.createElement('label');
+    box.className = 'inline-flex items-center gap-1 text-[11px] font-bold text-slate-700';
+    box.textContent = 'Precio extra $';
+    const input = document.createElement('input');
+    input.type = 'number'; input.min = '0'; input.step = '1';
+    input.value = String(Number(initialPrice || 0));
+    input.className = 'w-24 rounded-lg border border-pink-200 bg-white p-1.5 text-xs text-slate-800';
+    input.title = 'Precio adicional solo para este producto';
+    input.setAttribute('aria-label', 'Precio adicional solo para este producto');
+    const update = () => {
+      const array = kind === 'colores' ? tempColores : tempAccesorios;
+      let option = array[index]; if (!option) return;
+      if (typeof option === 'string') option = array[index] = { nombre: option, incremento: 0 };
+      const value = Number(input.value);
+      option.incremento = Number.isFinite(value) ? Math.max(0, value) : 0;
+      option.__cupissaProductOnly = true;
+    };
+    input.addEventListener('input', update);
+    input.addEventListener('change', update);
+    box.append(input); tag.append(box);
+  }
+  window.cupissaAddProductOnlyPriceEditor = addProductOnlyPriceEditor;
+  function addReplaceOptionButton(tag, kind, index) {
+    const edit = document.createElement('button'); edit.type = 'button';
+    edit.className = 'admin-option-photo-edit'; edit.textContent = 'Cambiar foto';
+    edit.title = 'Sustituir la fotografía de esta opción sin eliminarla';
+    edit.addEventListener('click', () => replaceOptionPhoto(kind, index));
+    tag.classList.add('admin-option-drop-target');
+    tag.tabIndex = 0;
+    tag.title = 'Arrastra una nueva imagen a esta opción, pega con Ctrl+V o pulsa Cambiar foto.';
+    tag.addEventListener('dragover', event => {
+      if (!event.dataTransfer?.types?.includes('Files')) return;
+      event.preventDefault(); tag.classList.add('is-dragging');
+    });
+    tag.addEventListener('dragleave', () => tag.classList.remove('is-dragging'));
+    tag.addEventListener('drop', event => {
+      event.preventDefault(); event.stopPropagation(); tag.classList.remove('is-dragging');
+      applyOptionPhotoFile(kind, index, Array.from(event.dataTransfer?.files || []).find(file => file.type.startsWith('image/')));
+    });
+    tag.addEventListener('paste', event => {
+      const file = Array.from(event.clipboardData?.items || []).map(item => item.getAsFile()).find(file => file?.type?.startsWith('image/'));
+      if (!file) return;
+      event.preventDefault(); event.stopPropagation(); applyOptionPhotoFile(kind,index,file);
+    });
+    tag.append(edit);
+    const hint = document.createElement('small');
+    hint.className='admin-option-drop-hint'; hint.textContent='Arrastra o pega foto aquí';
+    tag.append(hint);
+  }
+  window.cupissaAddReplaceOptionButton = addReplaceOptionButton;
+  window.cupissaRenderReusableOptions = renderReusableOptions;
+  window.cupissaRememberProductOptionPhotos = function () {
+    tempColores.forEach(item => { if (item && typeof item === 'object' && item.foto && !item.__cupissaProductOnly) saveLibraryItem('colores', item); });
+    tempAccesorios.forEach(item => { if (item && typeof item === 'object' && item.foto && !item.__cupissaProductOnly) saveLibraryItem('accesorios', item); });
+  };
+  // Registrar automáticamente las opciones en cuanto se agregan a la ficha.
+  window.cupissaSaveAccessoryTemplate = item => saveLibraryItem('accesorios', item, true);
+  window.cupissaSaveColorTemplate = item => saveLibraryItem('colores', item, true);
+  const previousAddColor = window.addColorToList;
+  window.addColorToList = function () {
+    const nameInput = $('inp-color-nombre');
+    const incrementInput = $('inp-color-incremento');
+    const name = nameInput?.value.trim();
+    if (!name) return;
+    const exists = tempColores.some(item => String(typeof item === 'string' ? item : item.nombre).trim().toUpperCase() === name.toUpperCase());
+    if (exists) { alert('Ese color ya está agregado.'); return; }
+    tempColores.push({
+      nombre: name,
+      incremento: Math.max(0, Number(incrementInput?.value || 0)),
+      foto: colorPhoto,
+      foto_original: colorPhotoOriginal || colorPhoto
+    });
+    saveLibraryItem('colores', tempColores[tempColores.length - 1], true);
+    if (nameInput) nameInput.value = '';
+    if (incrementInput) incrementInput.value = '';
+    colorPhoto = '';
+    colorPhotoOriginal = '';
+    if ($('prod-color-file')) $('prod-color-file').value = '';
+    window.renderColorFotoPreview();
+    window.renderColoresTags();
+  };
+
+  window.renderColoresTags = function () {
+    const container = $('list-colores-tags');
+    if (!container) return;
+    container.innerHTML = '';
+    tempColores.forEach((item, index) => {
+      const color = typeof item === 'string' ? { nombre: item, incremento: 0 } : item;
+      const tag = document.createElement('div');
+      tag.className = 'admin-image-option text-[11px]';
+      if (color.foto) {
+        const image = document.createElement('img'); image.src = color.foto; image.alt = `Color ${color.nombre}`; tag.appendChild(image);
+      }
+      const text = document.createElement('span');
+      text.className = 'font-bold text-slate-700';
+      text.textContent = `${color.nombre} (+${new Intl.NumberFormat('es-CO').format(Number(color.incremento || 0))})`;
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'ml-1 text-rose-600 font-black'; remove.textContent = '×';
+      remove.addEventListener('click', () => { tempColores.splice(index, 1); window.renderColoresTags(); });
+      tag.append(text); addProductOnlyPriceEditor(tag, 'colores', index, color.incremento); tag.append(remove); addReplaceOptionButton(tag, 'colores', index);
+      if (color.foto || color.imagen || color.imagen_url) {
+        const choice = document.createElement('label'); choice.className = 'admin-publish-cover-choice hidden';
+        const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.dataset.publishCoverKind = 'color'; checkbox.dataset.publishCoverIndex = String(index);
+        checkbox.addEventListener('change', () => window.setProductPublishCover?.('color', index, checkbox.checked));
+        const caption = document.createElement('span'); caption.textContent = 'Usar como portada';
+        choice.append(checkbox, caption); tag.appendChild(choice);
+      }
+      container.appendChild(tag);
+    });
+    window.setProductPublishPhotoCount?.();
+  };
+
+  window.renderPreviewPhotos = function () {
+    const container = $('files-preview-container');
+    if (!container) return;
+    container.innerHTML = '';
+    tempBase64Photos.forEach((src, index) => {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'admin-photo-preview';
+      const image = document.createElement('img'); image.src = src; image.alt = `Foto ${index + 1} del producto`;
+      image.className = 'w-20 h-20 object-contain rounded-xl border border-slate-200 bg-slate-50';
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'absolute -top-2 -right-2 bg-rose-600 text-white rounded-full w-5 h-5 text-[10px] font-black';
+      remove.textContent = '×'; remove.title = 'Quitar fotografía'; remove.addEventListener('click', () => window.removeTempPhoto(index));
+      wrapper.append(image, remove);
+      const coverChoice = document.createElement('label'); coverChoice.className = 'admin-publish-cover-choice hidden';
+      const coverCheckbox = document.createElement('input'); coverCheckbox.type = 'checkbox'; coverCheckbox.dataset.publishCoverKind = 'product'; coverCheckbox.dataset.publishCoverIndex = String(index);
+      coverCheckbox.addEventListener('change', () => window.setProductPublishCover?.('product', index, coverCheckbox.checked));
+      const coverCaption = document.createElement('span'); coverCaption.textContent = 'Usar como portada';
+      coverChoice.append(coverCheckbox, coverCaption); wrapper.appendChild(coverChoice);
+      const replace = document.createElement('button'); replace.type = 'button';
+      replace.className = 'admin-photo-edit'; replace.textContent = 'Cambiar foto'; replace.title = 'Cambiar esta imagen sin quitarla';
+      replace.onclick = () => {
+        const file = document.createElement('input'); file.type = 'file'; file.accept = 'image/*';
+        file.onchange = async () => {
+          const selectedFile = file.files?.[0]; if (!selectedFile) return;
+          try { const original = await readImageFile(selectedFile);
+            pendingImageQueue.push({ original, target: 'product-edit', index });
+            if (!currentCropper) startQueuedImageCrop();
+          } catch (error) { alert(error.message || 'No fue posible abrir la imagen'); }
+        }; file.click();
+      };
+      wrapper.appendChild(replace);
+      if (String(tempOriginalPhotos[index] || '').startsWith('data:')) {
+        const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'admin-photo-edit'; edit.textContent = 'Recortar';
+        edit.addEventListener('click', () => {
+          pendingImageQueue.push({ original: tempOriginalPhotos[index], target: 'product-edit', index });
+          if (!currentCropper) startQueuedImageCrop();
+        });
+        wrapper.appendChild(edit);
+      }
+      container.appendChild(wrapper);
+    });
+    // Mantiene visible la selección de modalidad apenas existen 2 o más fotos.
+    // tempBase64Photos es el arreglo real que se llena al terminar cada recorte.
+    if (typeof window.setProductPublishPhotoCount === 'function') {
+      window.setProductPublishPhotoCount();
+    }
+  };
+
+  // Drag & drop y portapapeles para las imágenes principales.
+  function setupImageDropAndPaste() {
+    const zones = [
+      { input:$('prod-files-input'), target:'product', zone:$('prod-files-input')?.closest('.product-photo-dropzone') },
+      { input:$('prod-color-file'), target:'color', zone:$('prod-color-photo-area') },
+      { input:$('inp-accesorio-foto'), target:'accessory', zone:$('prod-accessory-photo-area') }
+    ];
+    zones.forEach(({ input, target, zone }) => {
+      if (!input || !zone || zone.dataset.dropReady) return;
+      zone.dataset.dropReady = 'true';
+      zone.addEventListener('dragover', event => { event.preventDefault(); zone.classList.add('is-dragging'); });
+      zone.addEventListener('dragleave', event => { if (!zone.contains(event.relatedTarget)) zone.classList.remove('is-dragging'); });
+      zone.addEventListener('drop', event => {
+        event.preventDefault(); zone.classList.remove('is-dragging');
+        enqueueImageFiles(event.dataTransfer?.files, target);
+      });
+    });
+    window.addEventListener('paste', event => {
+      if ($('modal-product-form')?.classList.contains('hidden')) return;
+      const files = Array.from(event.clipboardData?.items || []).filter(item => item.type.startsWith('image/'))
+        .map(item => item.getAsFile()).filter(Boolean);
+      if (!files.length) return;
+      const active = document.activeElement;
+      let target = 'product';
+      if (['prod-color-file','inp-color-nombre','inp-color-incremento'].includes(active?.id) || $('prod-color-photo-area')?.contains(active)) target = 'color';
+      else if (['inp-accesorio-foto','inp-accesorio-nombre','inp-accesorio-incremento'].includes(active?.id) || $('prod-accessory-photo-area')?.contains(active)) target = 'accessory';
+      event.preventDefault();
+      enqueueImageFiles(files, target);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Instalación PWA: la acción instala ADMIN en la pantalla de inicio.
+  // ---------------------------------------------------------------------------
+  let installPrompt = null;
+  function setupInstallButton() {
+    const button = $('install-admin-app');
+    if (!button || button.dataset.ready) return;
+    button.dataset.ready = 'true';
+    window.addEventListener('beforeinstallprompt', event => {
+      event.preventDefault(); installPrompt = event;
+      button.classList.add('is-installable');
+    });
+    window.addEventListener('appinstalled', () => {
+      installPrompt = null;
+      button.innerHTML = '<i class="fa-solid fa-check"></i><span>Creación instalada</span>';
+    });
+    button.addEventListener('click', async () => {
+      if (installPrompt) {
+        installPrompt.prompt();
+        await installPrompt.userChoice.catch(() => null);
+        installPrompt = null;
+        return;
+      }
+      const isAppleMobile = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+      if (isStandalone) { alert('Creación CUPISSA ya está instalada en este dispositivo.'); return; }
+      alert(isAppleMobile
+        ? 'Para instalar Creación CUPISSA: abre el menú Compartir de Safari y selecciona “Añadir a pantalla de inicio”.'
+        : 'Creación CUPISSA se instala desde el menú de instalación del navegador. Abre el menú del navegador y selecciona “Instalar aplicación” o “Añadir a pantalla de inicio”.');
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Inicio de mejoras tras cargar la estructura existente.
+  // ---------------------------------------------------------------------------
+function initEnhancements(){buildProductWizard();setupImageDropAndPaste();}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initEnhancements,{once:true});else initEnhancements();})();

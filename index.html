@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="robots" content="noindex, nofollow, noarchive">
+    <meta name="googlebot" content="noindex, nofollow, noarchive">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <script>try{if(localStorage.getItem('cupissa_admin_theme')==='dark')document.documentElement.classList.add('admin-dark')}catch(_){}</script>
+    <meta name="theme-color" content="#111827">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Creación">
+    <link rel="manifest" href="manifest.webmanifest">
+    <title>Creación | CUPISSA</title>
+    
+    <link rel="shortcut icon" href="favicon.png?v=20261115-transparent" type="image/png">
+    <link rel="icon" href="favicon.png?v=20261115-transparent" type="image/png">
+    <link rel="apple-touch-icon" href="admin-icon-192.png">
+    
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#fdf4ff',
+                            100: '#fae8ff',
+                            200: '#f5d0fe',
+                            300: '#f0abfc',
+                            400: '#e879f9',
+                            500: '#db2777',
+                            600: '#be185d',
+                            700: '#9d174d',
+                            800: '#831843',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <!-- Supabase JS CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <!-- Cropper.js (Librería de Recorte de Imagen) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+
+
+    <link rel="stylesheet" href="assets/css/admin-web.css?v=20261115-pedidos-completos-v1">
+    <link rel="stylesheet" href="assets/css/admin-enhancements.css?v=20261121-resenas-1">
+    <link rel="stylesheet" href="assets/css/admin-app-mobile.css?v=20261112-domicilios-2">
+    <link rel="stylesheet" href="assets/css/admin-theme.css?v=20261115-4">
+    <style>
+        .fuchsia-btn { background-color: #db2777; color: white; }
+        .fuchsia-btn:hover { background-color: #be185d; }
+        .fuchsia-bg { background-color: #db2777; }
+        .fuchsia-text { color: #db2777; }
+        .fuchsia-border { border-color: #db2777; }
+        .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #f0abfc; border-radius: 9999px; }
+    </style>
+<style>#modal-product-form>div{max-height:none!important;overflow:visible!important}#modal-product-form{padding:0!important}body{padding-bottom:24px!important}</style><style>
+#install-admin-app:not([hidden]){display:inline-flex!important;align-items:center;justify-content:center;gap:6px;white-space:nowrap;min-height:40px;font-size:12px;padding:8px 12px;background:#db2777;color:white;border-radius:12px;font-weight:700;flex-shrink:0}
+#install-admin-app[hidden]{display:none!important}
+@media(max-width:480px){#private-content header .max-w-7xl>div{height:auto;min-height:72px;flex-wrap:wrap;padding:10px 0;gap:8px}#private-content header img[alt="CUPISSA"]{height:30px}#install-admin-app:not([hidden]){font-size:11px;padding:8px 10px}}
+</style></head>
+<body class="bg-slate-50 text-slate-800">    <div id="admin-login-screen" class="fixed inset-0 bg-slate-900 z-50 flex items-center justify-center p-4">
+        <div class="max-w-md w-full bg-white rounded-3xl shadow-2xl overflow-hidden border border-pink-100">
+            <div class="fuchsia-bg p-8 text-center text-white">
+                <div class="w-16 h-16 mx-auto mb-3 bg-white/20 backdrop-blur-md rounded-2xl p-3 flex items-center justify-center">
+                    <i class="fa-solid fa-shield-halved text-3xl text-white"></i>
+                </div>
+                <h2 class="text-2xl font-black">Creación CUPISSA</h2>
+                <p class="text-pink-100 text-xs mt-1">Ingresa con tus credenciales de administrador</p>
+            </div>
+            
+            <form onsubmit="handleAdminLogin(event)" class="p-6 sm:p-8 space-y-5">
+                <div id="admin-login-error" class="hidden bg-pink-50 border border-pink-200 fuchsia-text text-xs p-3 rounded-xl flex items-center space-x-2 font-medium">
+                    <i class="fa-solid fa-circle-exclamation text-base"></i>
+                    <span>Usuario o contraseña de administrador incorrectos.</span>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Correo Electrónico</label>
+                    <input type="email" id="admin-user-email" required placeholder="contacto@cupissa.com" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-pink-500 text-sm font-semibold">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Contraseña</label>
+                    <input type="password" id="admin-user-pass" required placeholder="••••••••" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-pink-500 text-sm font-semibold">
+                </div>
+
+                <button type="submit" class="w-full py-3.5 fuchsia-btn font-bold rounded-xl shadow-lg transition-all text-sm flex items-center justify-center space-x-2">
+                    <span>Acceder a creación</span>
+                    <i class="fa-solid fa-arrow-right"></i>
+                </button>
+                <div id="admin-supabase-config-notice" class="hidden rounded-xl border border-amber-200 bg-amber-50 p-3 text-left">
+                    <p class="text-[11px] leading-relaxed text-amber-900">La conexión con Supabase necesita una clave pública del proyecto. El correo y la contraseña de Authentication son datos distintos.</p>
+                    <button type="button" onclick="openSupabaseConfig()" class="mt-2 text-xs font-black text-pink-700 underline">Configurar conexión</button>
+                </div>
+                <button type="button" onclick="openSupabaseConfig()" class="w-full text-[10px] font-bold text-slate-500 hover:text-pink-700">Configurar / cambiar conexión de Supabase</button>
+            </form>
+            <div id="admin-supabase-config-panel" class="hidden border-t border-slate-100 bg-slate-50 p-5 text-left space-y-3">
+                <div class="flex items-center justify-between gap-3">
+                    <h3 class="text-sm font-black text-slate-800">Conexión de Supabase</h3>
+                    <button type="button" onclick="closeSupabaseConfig()" class="text-slate-400 hover:text-slate-700" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <p class="text-[10px] leading-relaxed text-slate-600">Copia la clave <strong>Publishable</strong> del proyecto CUPISSA. También se acepta la clave antigua <strong>anon</strong>. No uses <strong>Secret</strong> ni <strong>service_role</strong>.</p>
+                <label for="admin-supabase-public-key" class="block text-[10px] font-black uppercase text-slate-600">Clave pública publishable / anon</label>
+                <input id="admin-supabase-public-key" type="password" autocomplete="off" spellcheck="false" placeholder="sb_publishable_…" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs font-mono">
+                <p id="admin-supabase-config-error" class="hidden rounded-lg bg-rose-50 p-2 text-[10px] text-rose-700"></p>
+                <a href="https://supabase.com/dashboard/project/lkdxtesgwqoizobxaawp/settings/api-keys" target="_blank" rel="noopener noreferrer" class="inline-block text-[10px] font-bold text-pink-700 underline">Abrir claves API del proyecto CUPISSA</a>
+                <button type="button" onclick="saveSupabasePublicKey(event)" class="w-full rounded-xl fuchsia-btn px-4 py-3 text-xs font-black">Guardar conexión</button>
+            </div>
+        </div>
+    </div>
+
+<div id="private-content" class="hidden"><header class="bg-white border-b border-pink-100 sticky top-0 z-40"><div class="max-w-7xl mx-auto px-4"><div class="flex justify-between items-center h-20 gap-2"><div><img src="logo.png" alt="CUPISSA" class="h-10 object-contain"><span class="text-xs font-bold text-pink-700">Creación de productos</span></div><div class="flex gap-2 items-center"><button id="install-admin-app" type="button" class="admin-install-button creation-install-button"><i class="fa-solid fa-download"></i> Instalar app</button><button onclick="handleAdminLogout()" class="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold">Cerrar sesión</button></div></div></div></header><main class="max-w-5xl mx-auto p-4 space-y-4"><div id="modal-product-form" class="flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-3xl max-w-4xl w-full p-6 sm:p-8 shadow-2xl border border-slate-100 space-y-6  custom-scrollbar relative">
+            
+            
+
+            <div class="border-b border-slate-100 pb-4">
+                <h3 id="product-modal-title" class="text-xl font-black text-pink-600 flex items-center space-x-2">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    <span>Nuevo producto · CUPISSA STUDIO</span>
+                </h3>
+            </div>
+
+            <form onsubmit="handleSaveProduct(event)" class="space-y-5 text-xs">
+                <input type="hidden" id="prod-edit-id">
+                
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block font-bold text-slate-700 uppercase mb-1">Nombre del Producto *</label>
+                        <input type="text" id="prod-nombre" required placeholder="Ej: Vestido Elegante Gala Red" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 uppercase mb-1">Mundos *</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="prod-mundo-input" list="prod-mundo-options" placeholder="Escribe o selecciona un mundo" class="min-w-0 flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium uppercase" onkeydown="handleProductMultiInputKey(event, 'mundo')">
+                            <button type="button" onclick="addProductMultiValue('mundo')" class="px-3 py-2 rounded-xl bg-pink-600 text-white font-bold hover:bg-pink-700" aria-label="Agregar mundo"><i class="fa-solid fa-plus"></i></button>
+                        </div>
+                        <datalist id="prod-mundo-options"></datalist>
+                        <div id="prod-mundo-tags" class="flex flex-wrap gap-1.5 mt-2"></div>
+                        <input type="hidden" id="prod-mundo">
+                        <p class="text-[10px] text-slate-400 mt-1">Puedes agregar varios mundos al mismo producto.</p>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block font-bold text-slate-700 uppercase mb-1">Descripción del Producto (Visible en Ver Op.)</label>
+                    <textarea id="prod-descripcion" rows="3" placeholder="Ingresa los detalles, materiales, cuidados o información importante del producto..." class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium text-xs"></textarea>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block font-bold text-slate-700 uppercase mb-1">Categorías *</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="prod-categoria-input" list="prod-categoria-options" placeholder="Escribe o selecciona una categoría" class="min-w-0 flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium" onkeydown="handleProductMultiInputKey(event, 'categoria')">
+                            <button type="button" onclick="addProductMultiValue('categoria')" class="px-3 py-2 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700" aria-label="Agregar categoría"><i class="fa-solid fa-plus"></i></button>
+                        </div>
+                        <datalist id="prod-categoria-options"></datalist>
+                        <div id="prod-categoria-tags" class="flex flex-wrap gap-1.5 mt-2"></div>
+                        <input type="hidden" id="prod-categoria">
+                        <p class="text-[10px] text-slate-400 mt-1">El producto puede pertenecer a varias categorías.</p>
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 uppercase mb-1">Subcategorías</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="prod-subcategoria-input" list="prod-subcategoria-options" placeholder="Escribe o selecciona una subcategoría" class="min-w-0 flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium" onkeydown="handleProductMultiInputKey(event, 'subcategoria')">
+                            <button type="button" onclick="addProductMultiValue('subcategoria')" class="px-3 py-2 rounded-xl bg-slate-700 text-white font-bold hover:bg-slate-800" aria-label="Agregar subcategoría"><i class="fa-solid fa-plus"></i></button>
+                        </div>
+                        <datalist id="prod-subcategoria-options"></datalist>
+                        <div id="prod-subcategoria-tags" class="flex flex-wrap gap-1.5 mt-2"></div>
+                        <input type="hidden" id="prod-subcategoria">
+                        <p class="text-[10px] text-slate-400 mt-1">Puedes asignar varias subcategorías o dejarlo vacío.</p>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="block font-bold text-slate-700 uppercase mb-1">Temporadas *</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="prod-temporada-input" list="prod-temporada-options" placeholder="Escribe o selecciona una temporada" class="min-w-0 flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium uppercase" onkeydown="handleProductMultiInputKey(event, 'temporada')">
+                            <button type="button" onclick="addProductMultiValue('temporada')" class="px-3 py-2 rounded-xl bg-purple-600 text-white font-bold hover:bg-purple-700" aria-label="Agregar temporada"><i class="fa-solid fa-plus"></i></button>
+                        </div>
+                        <datalist id="prod-temporada-options"></datalist>
+                        <div id="prod-temporada-tags" class="flex flex-wrap gap-1.5 mt-2"></div>
+                        <input type="hidden" id="prod-temporada">
+                        <p id="temporada-count-label" class="text-[10px] font-bold text-pink-700 mt-1">Puedes seleccionar varias temporadas para un mismo producto.</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                    <div>
+                        <label class="block font-bold text-slate-700 uppercase mb-1">Precio Detal / Venta ($) *</label>
+                        <input type="number" id="prod-precio-detal" required value="0" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 font-black text-slate-900">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 uppercase mb-1">Precio Mayorista ($)</label>
+                        <input type="number" id="prod-precio-mayorista" value="0" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 font-bold">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 uppercase mb-1">Cant. Mínima Mayorista</label>
+                        <input type="number" id="prod-cant-min-mayorista" value="6" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 font-bold">
+                    </div>
+                    <div>
+                        <label class="block font-bold fuchsia-text uppercase mb-1">% Anticipo Requerido *</label>
+                        <input type="number" id="prod-porcentaje-anticipo" required value="20" min="0" max="100" class="w-full bg-white border-2 fuchsia-border rounded-xl px-3 py-2 font-black fuchsia-text">
+                    </div>
+                </div>
+
+                <div class="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 space-y-1">
+                    <label class="block font-bold text-indigo-900 uppercase">Días de preparación / fabricación</label>
+                    <input type="number" id="prod-dias-preparacion" value="3" class="w-full bg-white border border-indigo-200 rounded-xl px-4 py-2 font-bold">
+                </div>
+
+                <div class="bg-pink-50/40 border border-pink-100 p-4 rounded-2xl flex flex-wrap gap-4 items-center justify-between font-bold text-slate-700">
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="checkbox" id="chk-personalizable" class="accent-pink-600 w-4 h-4">
+                        <span>Personalizable</span>
+                    </label>
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="checkbox" id="chk-al-por-mayor" class="accent-pink-600 w-4 h-4">
+                        <span>Al por Mayor</span>
+                    </label>
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="checkbox" id="chk-venta" checked class="accent-pink-600 w-4 h-4">
+                        <span>Venta</span>
+                    </label>
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="checkbox" id="chk-alquiler" onchange="toggleAlquilerFields()" class="accent-pink-600 w-4 h-4">
+                        <span>Alquiler</span>
+                    </label>
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="checkbox" id="chk-credito" class="accent-pink-600 w-4 h-4">
+                        <span>Crédito</span>
+                    </label>
+                    <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" id="chk-pago-contraentrega" class="accent-pink-600 w-4 h-4"><span>💵 Pago contra entrega</span></label>
+                    <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" id="chk-produccion-express" class="accent-pink-600 w-4 h-4"><span>⚡ Producción express</span></label>
+                </div>
+
+                <div id="wrapper-alquiler-extra" class="grid grid-cols-2 gap-4 bg-amber-50 p-3 rounded-2xl border border-amber-200 hidden">
+                    <div>
+                        <label class="block font-bold text-amber-800 uppercase mb-1">Precio del Alquiler ($)</label>
+                        <input type="number" id="prod-precio-alquiler" value="0" class="w-full bg-white border border-amber-200 rounded-xl px-3 py-2 font-bold">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-amber-800 uppercase mb-1">Valor del Depósito ($)</label>
+                        <input type="number" id="prod-valor-deposito" value="0" class="w-full bg-white border border-amber-200 rounded-xl px-3 py-2 font-bold">
+                    </div>
+                </div>
+
+                <!-- TALLAS DISPONIBLES -->
+                <div class="border border-indigo-100 bg-indigo-50/20 rounded-2xl p-4 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="font-black text-indigo-900 uppercase">TALLAS DISPONIBLES & INCREMENTO</span>
+                    </div>
+
+                    <div class="flex gap-2">
+                        <input type="text" id="inp-talla-nombre" placeholder="Ej: S, M, L, XL" class="flex-1 bg-white border rounded-xl px-3 py-2">
+                        <input type="number" id="inp-talla-incremento" placeholder="Incremento $" class="w-48 bg-white border rounded-xl px-3 py-2">
+                        <button type="button" onclick="addTallaToList()" class="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl">+ Agregar</button>
+                    </div>
+
+                    <div id="list-tallas-tags" class="flex flex-wrap gap-2 pt-1"></div>
+
+                    <!-- CONTENEDOR DE PLANTILLAS DE TALLAS GUARDADAS (ABAJO DE LA BARRA DE TALLAS) -->
+                    <div id="saved-tallas-templates-section" class="hidden pt-3 border-t border-indigo-100 space-y-2">
+                        <span class="text-[11px] font-bold text-indigo-800 uppercase block">Plantillas de tallas guardadas anteriores (Haz clic para cargar):</span>
+                        <div id="saved-tallas-templates-container" class="flex flex-wrap gap-2"></div>
+                    </div>
+                </div>
+
+                <div class="border border-pink-100 bg-pink-50/20 rounded-2xl p-4 space-y-3">
+                    <span class="font-black fuchsia-text uppercase">COLORES DISPONIBLES & INCREMENTO</span>
+                    <div class="flex gap-2">
+                        <input type="text" id="inp-color-nombre" placeholder="Ej: Rojo, Dorado" class="flex-1 bg-white border rounded-xl px-3 py-2">
+                        <input type="number" id="inp-color-incremento" placeholder="Incremento $" class="w-48 bg-white border rounded-xl px-3 py-2">
+                        <button type="button" onclick="addColorToList()" class="px-4 py-2 fuchsia-btn font-bold rounded-xl">+ Agregar</button>
+                    </div>
+                    <div id="list-colores-tags" class="flex flex-wrap gap-2 pt-1"></div>
+                </div>
+
+                <div class="border border-emerald-100 bg-emerald-50/30 rounded-2xl p-4 space-y-3">
+                    <span class="font-black text-emerald-800 uppercase">ACCESORIOS DISPONIBLES: FOTO E INCREMENTO</span>
+                    <p class="text-[11px] text-slate-500">Registra cada accesorio con su nombre, fotografía y valor adicional. El cliente podrá ver la foto y elegirlo antes de confirmar el precio total.</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <input type="text" id="inp-accesorio-nombre" placeholder="Nombre: Moño, diadema, bolsa..." class="min-w-0 bg-white border rounded-xl px-3 py-2">
+                        <input type="number" id="inp-accesorio-incremento" min="0" step="100" placeholder="Incremento $" class="w-full bg-white border rounded-xl px-3 py-2">
+                    </div>
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+                        <label class="flex-1 block text-xs font-bold text-emerald-900">Foto del accesorio
+                            <input type="file" id="inp-accesorio-foto" accept="image/*" onchange="handleAccesorioFotoSelected(event)" class="mt-1 w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:font-bold file:bg-emerald-100 file:text-emerald-800">
+                        </label>
+                        <div id="accesorio-foto-preview" class="hidden"></div>
+                        <button type="button" onclick="addAccesorioToList()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl">+ Agregar accesorio</button>
+                    </div>
+                    <div id="list-accesorios-tags" class="flex flex-wrap gap-2 pt-1"></div>
+                </div>
+
+                <div class="border border-slate-200 rounded-2xl p-4 space-y-3 bg-white product-photo-dropzone">
+                    <label class="block font-bold text-slate-700 uppercase">Fotografías del producto (puedes seleccionar varias)</label>
+                    <input type="file" id="prod-files-input" multiple accept="image/*" onchange="handleImageFilesSelected(event)" class="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:font-bold file:bg-pink-50 file:text-pink-600 hover:file:bg-pink-100">
+                    <p class="text-[11px] text-slate-500">Puedes cargar varias fotos, recortarlas y decidir cómo crear las publicaciones.</p>
+                    <div id="files-preview-container" class="flex flex-wrap gap-3 pt-2"></div>
+                    <div id="product-publish-modes" class="product-publish-mode-panel" data-photo-count="0">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <p class="text-xs font-black uppercase tracking-wide text-slate-800">¿Cómo deseas publicar estas fotografías?</p>
+                            <span data-publish-count class="text-[10px] font-semibold text-slate-500">Sin seleccionar una modalidad, se creará una sola publicación con todas las fotos.</span>
+                        </div>
+                        <div class="admin-publish-modes">
+                            <button type="button" data-publish-mode="single" aria-pressed="false" aria-disabled="true" disabled onclick="window.setProductPublishMode && window.setProductPublishMode('single')" class="admin-publish-mode">
+                                <span class="admin-publish-radio" aria-hidden="true"></span>
+                                <strong><i class="fa-solid fa-images mr-1"></i> PUBLICAR PRODUCTOS POR SEPARADO</strong>
+                                <small>Crea una publicación independiente por cada foto que marques como portada. Cada publicación conserva los mismos datos y variaciones, y muestra únicamente su portada.</small>
+                            </button>
+                            <button type="button" data-publish-mode="gallery" aria-pressed="false" aria-disabled="true" disabled onclick="window.setProductPublishMode && window.setProductPublishMode('gallery')" class="admin-publish-mode">
+                                <span class="admin-publish-radio" aria-hidden="true"></span>
+                                <strong><i class="fa-solid fa-layer-group mr-1"></i> PUBLICAR PRODUCTOS JUNTOS</strong>
+                                <small>Crea una publicación por cada foto que marques como portada. Cada una tendrá esa portada y conservará todas las fotografías en su galería.</small>
+                            </button>
+                        </div>
+                        <p class="text-[10px] font-semibold text-slate-500 mt-2">No es obligatorio elegir una modalidad: si no seleccionas ninguna, se creará una sola publicación con toda la galería. Si eliges una modalidad, marca debajo qué fotografías quieres usar como portada de cada publicación.</p>
+                        <p id="product-publish-cover-help" class="text-[10px] font-bold text-pink-700 mt-2 hidden">Marca las fotos que deseas usar como portada. Cada foto marcada creará una publicación.</p>
+                        <p id="product-publish-cover-selected" class="text-[10px] text-slate-600 mt-1 hidden"></p>
+                    </div>
+                </div>
+
+                <div class="flex items-center space-x-3 pt-3 border-t border-slate-100">
+                    
+                    <button type="submit" class="w-full py-3 fuchsia-btn rounded-xl font-bold shadow-md flex items-center justify-center space-x-2">
+                        <span>Crear producto(s)</span>
+                    </button>
+                </div>
+
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 4: RECORTADOR DE IMAGEN (CROPPER.JS) -->
+    <div id="modal-cropper" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[60] flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="font-black text-slate-900 text-sm uppercase flex items-center space-x-2">
+                    <i class="fa-solid fa-crop fuchsia-text"></i>
+                    <span>Recorte libre para el Catálogo</span>
+                </h3>
+                <span id="cropper-counter" class="text-xs font-bold fuchsia-text">Foto 1 de 1</span>
+            </div>
+
+            <p class="text-[11px] text-slate-500">Ajusta el marco a cualquier ancho o alto. No se fuerza un recorte cuadrado; también puedes omitir el recorte para conservar la imagen completa.</p>
+            <div class="max-h-[60vh] overflow-hidden bg-slate-900 rounded-2xl flex items-center justify-center">
+                <img id="image-to-crop" src="" alt="Para recortar" class="max-h-[50vh] block max-w-full">
+            </div>
+
+            <div class="flex justify-between items-center pt-2">
+                <button type="button" onclick="skipCurrentPhotoCrop()" class="px-4 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl text-xs">Omitir recorte</button>
+                <button type="button" onclick="confirmCropPhoto()" class="px-6 py-2.5 fuchsia-btn font-black rounded-xl text-xs shadow-md flex items-center space-x-2">
+                    <i class="fa-solid fa-check"></i>
+                    <span>Confirmar y Agregar Imagen</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+</main></div><script src="assets/js/00-config.js"></script>
+<script src="assets/js/admin-dialogs.js"></script>
+<script src="assets/js/auth.js"></script>
+<script src="assets/js/product-create.js"></script>
+<script src="assets/js/product-wizard.js"></script><script src="assets/js/install.js?v=20261126-install2"></script></body></html>
