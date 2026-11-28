@@ -7,37 +7,41 @@ async function edit(id){try{await verifyAdmin();const {data:p,error}=await supab
 async function mutate(p,remove){if(!confirm(remove?'¿Eliminar definitivamente este producto de Supabase?':'¿Cambiar la visibilidad de este producto?'))return;try{await verifyAdmin();const q=supabaseClient.from('productos');const {data,error}=await (remove?q.delete():q.update({oculto:!p.oculto})).eq('id',p.id).select('id').single();if(error||!data)throw error||Error('Cambio no confirmado');load();void loadClassificationOptions().catch(console.warn);}catch(e){alert(e.message);}}
 async function load(){const token=++seq;const host=$('creation-results');host.textContent='Cargando productos…';try{let q=supabaseClient.from('productos').select('id,nombre,precio_detal,fotos,oculto,black_friday_pct',{count:'exact'}).order('created_at',{ascending:false}).order('id').range(page*size,page*size+size-1);const search=$('creation-search').value.trim();if(search)q=q.ilike('nombre','%'+search.replace(/[%_]/g,'')+'%');const {data,error,count}=await q;if(token!==seq)return;if(error)throw error;host.replaceChildren();for(const p of data||[]){const card=document.createElement('article');card.className='creation-product';const img=document.createElement('img');img.alt='';if(arr(p.fotos)[0])img.src=p.fotos[0];img.loading='lazy';card.append(img,text('strong',p.nombre||'Sin nombre'),text('span',formatCOP(p.precio_detal)+(p.oculto?' · Oculto':' · Publicado')));const actions=document.createElement('div');actions.className='creation-product-actions';actions.append(button(p.black_friday_pct?'B · '+p.black_friday_pct+'%':'B',async()=>{const value=cupissaAskBlackFriday(p.black_friday_pct);if(value===null)return;try{await verifyAdmin();const {error}=await supabaseClient.from('productos').update({black_friday_pct:value}).eq('id',p.id).select('id').single();if(error)throw error;load();}catch(e){alert(e.message);}}),button('Editar',()=>edit(p.id)),button(p.oculto?'Publicar':'Ocultar',()=>mutate(p,false)),button('Eliminar',()=>mutate(p,true)));card.append(actions);host.append(card);}if(!data?.length)host.textContent='No hay productos.';$('creation-page').textContent=`Página ${page+1} de ${Math.max(1,Math.ceil((count||0)/size))}`;$('creation-prev').disabled=page===0;$('creation-next').disabled=(page+1)*size>=(count||0);}catch(e){if(token===seq)host.textContent='No se pudo cargar: '+e.message;}}
 $('creation-prev').onclick=()=>{if(page>0){page--;load();}};$('creation-next').onclick=()=>{page++;load();};let timer;$('creation-search').oninput=()=>{clearTimeout(timer);timer=setTimeout(()=>{page=0;load();},300);};
-// Independent promotion management; uses the existing Black Friday schema.
-let bfProduct=null,bfPage=0,bfSequence=0,bfSearchSequence=0;
-const bfFields='id,nombre,precio_detal,precio_alquiler,venta,alquiler,fotos,oculto,black_friday_pct';
+// Black Friday: quick publication of a new product with four inputs.
+let bfPage=0,bfSequence=0,bfPreviewUrl=null;
+const bfFields='id,nombre,precio_detal,fotos,oculto,black_friday_pct';
 const bfStatus=(message,error=false)=>{const el=$('bf-status');el.textContent=message;el.className=error?'text-red-700 font-bold':'text-green-700 font-bold';};
 function bfPreview(){
  const price=Number($('bf-price').value),pct=Number($('bf-discount').value);
- const valid=$('bf-offer-form').checkValidity()&&price>0&&pct>=0&&pct<=99;
+ const valid=Number.isSafeInteger(price)&&price>0&&Number.isInteger(pct)&&pct>=1&&pct<=99;
  const total=Math.round(price*(100-pct)/100);
  $('bf-final').textContent=valid?formatCOP(total):'—';
  $('bf-saving').textContent=valid?'Ahorro: '+formatCOP(price-total):'';
 }
-function bfSelect(p){
- bfProduct=p;$('bf-name').value=p.nombre||'';$('bf-selected').textContent=(p.nombre||'Sin nombre')+(p.oculto?' · Oculto (no visible en tienda)':'');
- $('bf-price').value=p.precio_detal??0;$('bf-discount').value=p.black_friday_pct||50;
- $('bf-offer-form').hidden=false;$('bf-matches').replaceChildren();bfStatus('');bfPreview();
+function bfClearPreview(){
+ if(bfPreviewUrl)URL.revokeObjectURL(bfPreviewUrl);
+ bfPreviewUrl=null;$('bf-photo-preview').hidden=true;$('bf-photo-preview').removeAttribute('src');
 }
-function bfCard(p,active){
+$('bf-photo').onchange=()=>{
+ bfClearPreview();const file=$('bf-photo').files[0];if(!file)return;
+ if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10*1024*1024){$('bf-photo').value='';bfStatus('Selecciona una imagen JPG, PNG o WEBP de máximo 10 MB.',true);return;}
+ bfPreviewUrl=URL.createObjectURL(file);$('bf-photo-preview').src=bfPreviewUrl;$('bf-photo-preview').hidden=false;bfStatus('');
+};
+function bfCard(p){
  const card=document.createElement('article');card.className='creation-product';
  const img=document.createElement('img');img.alt='';if(arr(p.fotos)[0])img.src=p.fotos[0];img.loading='lazy';
  const pct=Number(p.black_friday_pct)||0,price=Number(p.precio_detal)||0;
- card.append(img,text('strong',p.nombre||'Sin nombre'),text('span',formatCOP(price)+(p.oculto?' · Oculto':'')+(pct?' · '+pct+'% · '+formatCOP(Math.round(price*(100-pct)/100)):'')));
+ card.append(img,text('strong',p.nombre||'Sin nombre'),text('span',formatCOP(price)+(p.oculto?' · Oculto':'')+' · '+pct+'% · '+formatCOP(Math.round(price*(100-pct)/100))));
  const actions=document.createElement('div');actions.className='creation-product-actions';
- actions.append(button(active?'Editar oferta':'Seleccionar',()=>bfSelect(p)));
+ actions.append(button('Editar producto',()=>{if(!busy())edit(p.id);}));
  card.append(actions);return card;
 }
 async function bfLoad(){
  const token=++bfSequence,host=$('bf-active');host.textContent='Cargando ofertas…';
  try{
- const {data,error,count}=await supabaseClient.from('productos').select(bfFields,{count:'exact'}).gt('black_friday_pct',0).order('nombre').order('id').range(bfPage*size,bfPage*size+size-1);
+ const {data,error,count}=await supabaseClient.from('productos').select(bfFields,{count:'exact'}).gt('black_friday_pct',0).order('created_at',{ascending:false}).order('id').range(bfPage*size,bfPage*size+size-1);
  if(token!==bfSequence)return;if(error)throw error;
- host.replaceChildren(...(data||[]).map(p=>bfCard(p,true)));
+ host.replaceChildren(...(data||[]).map(bfCard));
  if(!data?.length)host.textContent='No hay ofertas activas.';
  $('bf-page').textContent='Página '+(bfPage+1)+' de '+Math.max(1,Math.ceil((count||0)/size));
  $('bf-prev').disabled=bfPage===0;$('bf-next').disabled=(bfPage+1)*size>=(count||0);
@@ -45,33 +49,33 @@ async function bfLoad(){
 }
 window.creationShowBlackFriday=()=>{
  if(busy())return;if(!form.hidden&&!confirm('¿Salir del formulario sin guardar?'))return;
- form.hidden=true;catalog.hidden=true;bf.hidden=false;bfPage=0;bfLoad();
+ form.hidden=true;catalog.hidden=true;bf.hidden=false;bfPage=0;bfPreview();bfLoad();
 };
 $('bf-prev').onclick=()=>{if(bfPage>0){bfPage--;bfLoad();}};
 $('bf-next').onclick=()=>{bfPage++;bfLoad();};
-$('bf-search-form').onsubmit=async e=>{
- e.preventDefault();if($('bf-save').disabled)return;
- const token=++bfSearchSequence,host=$('bf-matches'),name=$('bf-name').value.trim().replace(/[%_]/g,'');
- bfProduct=null;$('bf-offer-form').hidden=true;bfStatus('');
- if(!name){host.textContent='Escribe un nombre.';return;}
- host.textContent='Buscando…';
- try{await verifyAdmin();const {data,error}=await supabaseClient.from('productos').select(bfFields).ilike('nombre','%'+name+'%').order('nombre').limit(50);
- if(token!==bfSearchSequence)return;if(error)throw error;
- host.replaceChildren(...(data||[]).map(p=>bfCard(p,false)));if(!data?.length)host.textContent='No se encontraron productos. Créalos primero en Nuevo producto.';
- }catch(e){if(token===bfSearchSequence)host.textContent='Error: '+e.message;}
-};
-$('bf-name').oninput=()=>{bfSearchSequence++;bfProduct=null;$('bf-offer-form').hidden=true;$('bf-matches').replaceChildren();};
 $('bf-price').oninput=bfPreview;$('bf-discount').oninput=bfPreview;
 $('bf-offer-form').onsubmit=async e=>{
- e.preventDefault();if(!bfProduct||$('bf-save').disabled||!e.currentTarget.checkValidity())return;
- const price=Number($('bf-price').value),pct=Number($('bf-discount').value),p=bfProduct;
- if(!Number.isSafeInteger(price)||price<=0||!Number.isInteger(pct)||pct<0||pct>99)return;
- if(!confirm('¿Guardar '+pct+'% de descuento para '+p.nombre+' con precio original '+formatCOP(price)+'?'))return;
- const btn=$('bf-save');btn.disabled=true;btn.textContent='Guardando…';
- try{await verifyAdmin();const {data,error}=await supabaseClient.from('productos').update({precio_detal:price,black_friday_pct:pct}).eq('id',p.id).select(bfFields).single();
- if(error||!data)throw error||Error('Cambio no confirmado');
- bfProduct=data;bfStatus(pct?'Oferta guardada correctamente.':'Oferta retirada correctamente.');bfPage=0;await bfLoad();
- }catch(e){bfStatus('No se pudo guardar: '+e.message,true);}finally{btn.disabled=false;btn.textContent='Guardar oferta';}
+ e.preventDefault();const quickForm=e.currentTarget,btn=$('bf-save');
+ if(btn.disabled||!quickForm.checkValidity())return;
+ const name=$('bf-name').value.trim(),price=Number($('bf-price').value),pct=Number($('bf-discount').value),file=$('bf-photo').files[0];
+ if(!name||!file||!Number.isSafeInteger(price)||price<=0||!Number.isInteger(pct)||pct<1||pct>99){bfStatus('Completa correctamente los cuatro campos.',true);return;}
+ const extension=({'image/jpeg':'jpg','image/png':'png','image/webp':'webp'})[file.type];
+ if(!extension||file.size>10*1024*1024){bfStatus('Selecciona una imagen JPG, PNG o WEBP de máximo 10 MB.',true);return;}
+ const inputs=[...quickForm.querySelectorAll('input')];inputs.forEach(input=>input.disabled=true);btn.disabled=true;btn.textContent='Publicando…';bfStatus('');
+ try{
+ await verifyAdmin();
+ const bucket=supabaseClient.storage.from('productos-cupissa');
+ const path='products/bf_'+Date.now()+'_'+crypto.randomUUID()+'.'+extension;
+ const {error:uploadError}=await bucket.upload(path,file,{cacheControl:'3600',upsert:false,contentType:file.type});
+ if(uploadError)throw uploadError;
+ const photo=bucket.getPublicUrl(path).data.publicUrl;
+ if(!photo)throw Error('No se obtuvo la URL de la foto.');
+ // Same product schema and normal wizard defaults. No invented variants.
+ const payload={nombre:name,descripcion:'',mundo:'General',mundos:['General'],categoria:'General',categorias:['General'],subcategoria:null,subcategorias:[],temporada:'Black Friday',temporadas:['Black Friday'],precio_detal:price,precio_mayorista:0,cant_min_mayorista:6,porcentaje_anticipo:20,dias_preparacion:3,oculto:false,personalizable:false,al_por_mayor:false,venta:true,alquiler:false,credito:false,pago_contraentrega:false,produccion_express:false,black_friday_pct:pct,precio_alquiler:0,valor_deposito:0,tallas:[],colores:[],accesorios:[],fotos:[photo],fotos_originales:[photo]};
+ const {data,error}=await supabaseClient.from('productos').insert([payload]).select('id').single();
+ if(error||!data)throw error||Error('Publicación no confirmada.');
+ quickForm.reset();bfClearPreview();bfPreview();bfStatus('Producto Black Friday publicado correctamente.');bfPage=0;await bfLoad();void loadClassificationOptions().catch(console.warn);
+ }catch(err){bfStatus('No se pudo publicar: '+err.message,true);}finally{inputs.forEach(input=>input.disabled=false);btn.disabled=false;btn.textContent='Publicar producto Black Friday';}
 };
 function options(inputId, items, select){const input=$(inputId);if(!input)return;let panel=$('reuse-'+inputId);if(!panel){panel=document.createElement('details');panel.id='reuse-'+inputId;panel.className='creation-reuse';input.closest('div').after(panel);}panel.replaceChildren();panel.append(text('summary','Buscar opciones guardadas'));const search=document.createElement('input');search.type='search';search.placeholder='Buscar…';const list=document.createElement('div');list.className='creation-option-list';panel.append(search,list);const render=()=>{list.replaceChildren();const term=search.value.toLowerCase();for(const v of items.filter(v=>v.nombre.toLowerCase().includes(term)).slice(0,100))list.append(button(v.nombre+(v.incremento!=null?' · '+formatCOP(v.incremento):''),()=>{select(v);panel.open=false;}));};search.oninput=render;render();}
 window.creationRefreshOptions=()=>{for(const field of ['mundo','categoria','subcategoria','temporada']){const vals=[...new Set(allProducts.flatMap(p=>productMultiValuesFromRow(p,field)))];options('prod-'+field+'-input',vals.map(nombre=>({nombre})),v=>{$('prod-'+field+'-input').value=v.nombre;addProductMultiValue(field);});}for(const [field,id] of [['tallas','talla'],['colores','color'],['accesorios','accesorio']]){const map=new Map();for(const p of allProducts)for(const raw of arr(p[field])){const v=norm(raw);if(v?.nombre&&!map.has(v.nombre.toLowerCase()))map.set(v.nombre.toLowerCase(),v);}options('inp-'+id+'-nombre',[...map.values()],v=>{const target=field==='tallas'?tempTallas:field==='colores'?tempColores:tempAccesorios;if(!target.some(x=>String(x.nombre||x).toLowerCase()===v.nombre.toLowerCase()))target.push({...v,__cupissaProductOnly:true});if(field==='tallas')renderTallasTags();else if(field==='colores')renderColoresTags();else renderAccesoriosTags();});}};
