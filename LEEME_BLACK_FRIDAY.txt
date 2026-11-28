@@ -9,3 +9,5 @@ Verificación: sintaxis JavaScript y pruebas locales del cálculo de checkout y 
 
 ACTUALIZACIÓN EXCLUSIVA DE CREACIÓN:
 Pestaña Black Friday: publica PRODUCTOS NUEVOS con foto, nombre, precio original y porcentaje de descuento. No requiere buscar productos existentes. Se guarda en productos usando el mismo esquema; foto en productos-cupissa. Valores internos: mundo y categoría General, temporada Black Friday, venta activa, 20% anticipo, 3 días de preparación (valores del formulario normal), sin alquiler, crédito, mayorista ni variantes. Se pueden modificar posteriormente desde Gestionar productos. No requiere cambios de SQL adicionales si ya instalaste BLACK_FRIDAY.sql.
+
+Carga de imágenes: selección de archivo, arrastrar y soltar, pegar Ctrl+V/Cmd+V o botón Pegar imagen (según permisos del navegador).
