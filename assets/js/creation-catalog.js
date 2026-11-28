@@ -8,7 +8,7 @@ async function mutate(p,remove){if(!confirm(remove?'¿Eliminar definitivamente e
 async function load(){const token=++seq;const host=$('creation-results');host.textContent='Cargando productos…';try{let q=supabaseClient.from('productos').select('id,nombre,precio_detal,fotos,oculto,black_friday_pct',{count:'exact'}).order('created_at',{ascending:false}).order('id').range(page*size,page*size+size-1);const search=$('creation-search').value.trim();if(search)q=q.ilike('nombre','%'+search.replace(/[%_]/g,'')+'%');const {data,error,count}=await q;if(token!==seq)return;if(error)throw error;host.replaceChildren();for(const p of data||[]){const card=document.createElement('article');card.className='creation-product';const img=document.createElement('img');img.alt='';if(arr(p.fotos)[0])img.src=p.fotos[0];img.loading='lazy';card.append(img,text('strong',p.nombre||'Sin nombre'),text('span',formatCOP(p.precio_detal)+(p.oculto?' · Oculto':' · Publicado')));const actions=document.createElement('div');actions.className='creation-product-actions';actions.append(button(p.black_friday_pct?'B · '+p.black_friday_pct+'%':'B',async()=>{const value=cupissaAskBlackFriday(p.black_friday_pct);if(value===null)return;try{await verifyAdmin();const {error}=await supabaseClient.from('productos').update({black_friday_pct:value}).eq('id',p.id).select('id').single();if(error)throw error;load();}catch(e){alert(e.message);}}),button('Editar',()=>edit(p.id)),button(p.oculto?'Publicar':'Ocultar',()=>mutate(p,false)),button('Eliminar',()=>mutate(p,true)));card.append(actions);host.append(card);}if(!data?.length)host.textContent='No hay productos.';$('creation-page').textContent=`Página ${page+1} de ${Math.max(1,Math.ceil((count||0)/size))}`;$('creation-prev').disabled=page===0;$('creation-next').disabled=(page+1)*size>=(count||0);}catch(e){if(token===seq)host.textContent='No se pudo cargar: '+e.message;}}
 $('creation-prev').onclick=()=>{if(page>0){page--;load();}};$('creation-next').onclick=()=>{page++;load();};let timer;$('creation-search').oninput=()=>{clearTimeout(timer);timer=setTimeout(()=>{page=0;load();},300);};
 // Black Friday: quick publication of a new product with four inputs.
-let bfPage=0,bfSequence=0,bfPreviewUrl=null;
+let bfPage=0,bfSequence=0,bfPreviewUrl=null,bfSelectedFile=null;
 const bfFields='id,nombre,precio_detal,fotos,oculto,black_friday_pct';
 const bfStatus=(message,error=false)=>{const el=$('bf-status');el.textContent=message;el.className=error?'text-red-700 font-bold':'text-green-700 font-bold';};
 function bfPreview(){
@@ -20,12 +20,58 @@ function bfPreview(){
 }
 function bfClearPreview(){
  if(bfPreviewUrl)URL.revokeObjectURL(bfPreviewUrl);
- bfPreviewUrl=null;$('bf-photo-preview').hidden=true;$('bf-photo-preview').removeAttribute('src');
+ bfPreviewUrl=null;bfSelectedFile=null;$('bf-photo').value='';
+ $('bf-photo-preview').hidden=true;$('bf-photo-preview').removeAttribute('src');
+ $('bf-photo-name').textContent='';$('bf-remove-photo').hidden=true;
 }
-$('bf-photo').onchange=()=>{
- bfClearPreview();const file=$('bf-photo').files[0];if(!file)return;
- if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10*1024*1024){$('bf-photo').value='';bfStatus('Selecciona una imagen JPG, PNG o WEBP de máximo 10 MB.',true);return;}
- bfPreviewUrl=URL.createObjectURL(file);$('bf-photo-preview').src=bfPreviewUrl;$('bf-photo-preview').hidden=false;bfStatus('');
+function bfAcceptPhoto(file){
+ if($('bf-save').disabled||!file)return;
+ if(!['image/jpeg','image/png','image/webp'].includes(file.type)||!file.size||file.size>10*1024*1024){
+  bfStatus('Selecciona una imagen JPG, PNG o WEBP de máximo 10 MB.',true);return;
+ }
+ bfClearPreview();bfSelectedFile=file;
+ bfPreviewUrl=URL.createObjectURL(file);$('bf-photo-preview').src=bfPreviewUrl;
+ $('bf-photo-preview').hidden=false;$('bf-remove-photo').hidden=false;
+ $('bf-photo-name').textContent=file.name||'Imagen pegada';bfStatus('');
+}
+const bfDrop=$('bf-drop-zone');
+$('bf-file-button').onclick=()=>$('bf-photo').click();
+$('bf-remove-photo').onclick=()=>{if(!$('bf-save').disabled){bfClearPreview();bfStatus('');}};
+$('bf-photo').onchange=()=>bfAcceptPhoto($('bf-photo').files[0]);
+function bfImageFromTransfer(transfer){
+ if(!transfer)return null;
+ for(const item of Array.from(transfer.items||[])){
+  if(item.kind==='file'&&item.type.startsWith('image/')){const file=item.getAsFile();if(file)return file;}
+ }
+ return Array.from(transfer.files||[]).find(f=>f.type.startsWith('image/'))||null;
+}
+function bfHighlight(active){
+ bfDrop.classList.toggle('ring-4',active);bfDrop.classList.toggle('ring-pink-300',active);
+}
+for(const type of ['dragenter','dragover'])bfDrop.addEventListener(type,e=>{e.preventDefault();if(!$('bf-save').disabled)bfHighlight(true);});
+bfDrop.addEventListener('dragleave',e=>{if(!bfDrop.contains(e.relatedTarget))bfHighlight(false);});
+bfDrop.addEventListener('drop',e=>{
+ e.preventDefault();e.stopPropagation();bfHighlight(false);
+ if($('bf-save').disabled)return;
+ const file=bfImageFromTransfer(e.dataTransfer);
+ if(file)bfAcceptPhoto(file);else bfStatus('Arrastra un archivo de imagen o copia la imagen y pégala con Ctrl+V.',true);
+});
+document.addEventListener('paste',e=>{
+ if(bf.hidden||$('bf-save').disabled)return;
+ const file=bfImageFromTransfer(e.clipboardData);
+ if(file){e.preventDefault();bfAcceptPhoto(file);}
+});
+$('bf-paste-button').onclick=async()=>{
+ if($('bf-save').disabled)return;
+ try{
+  if(!navigator.clipboard?.read)throw Error('Portapapeles no disponible');
+  const items=await navigator.clipboard.read();
+  for(const item of items){
+   const type=item.types.find(t=>['image/png','image/jpeg','image/webp'].includes(t));
+   if(type){const blob=await item.getType(type);bfAcceptPhoto(new File([blob],'imagen-pegada.'+type.split('/')[1].replace('jpeg','jpg'),{type}));return;}
+  }
+  bfStatus('No se encontró una imagen en el portapapeles. Copia una imagen y vuelve a intentarlo.',true);
+ }catch(e){bfDrop.focus();bfStatus('Usa Ctrl+V (o Cmd+V en Mac) para pegar la imagen copiada.',true);}
 };
 function bfCard(p){
  const card=document.createElement('article');card.className='creation-product';
@@ -57,11 +103,11 @@ $('bf-price').oninput=bfPreview;$('bf-discount').oninput=bfPreview;
 $('bf-offer-form').onsubmit=async e=>{
  e.preventDefault();const quickForm=e.currentTarget,btn=$('bf-save');
  if(btn.disabled||!quickForm.checkValidity())return;
- const name=$('bf-name').value.trim(),price=Number($('bf-price').value),pct=Number($('bf-discount').value),file=$('bf-photo').files[0];
+ const name=$('bf-name').value.trim(),price=Number($('bf-price').value),pct=Number($('bf-discount').value),file=bfSelectedFile;
  if(!name||!file||!Number.isSafeInteger(price)||price<=0||!Number.isInteger(pct)||pct<1||pct>99){bfStatus('Completa correctamente los cuatro campos.',true);return;}
  const extension=({'image/jpeg':'jpg','image/png':'png','image/webp':'webp'})[file.type];
  if(!extension||file.size>10*1024*1024){bfStatus('Selecciona una imagen JPG, PNG o WEBP de máximo 10 MB.',true);return;}
- const inputs=[...quickForm.querySelectorAll('input')];inputs.forEach(input=>input.disabled=true);btn.disabled=true;btn.textContent='Publicando…';bfStatus('');
+ const inputs=[...quickForm.querySelectorAll('input, #bf-file-button, #bf-paste-button, #bf-remove-photo')];inputs.forEach(input=>input.disabled=true);btn.disabled=true;btn.textContent='Publicando…';bfStatus('');
  try{
  await verifyAdmin();
  const bucket=supabaseClient.storage.from('productos-cupissa');
